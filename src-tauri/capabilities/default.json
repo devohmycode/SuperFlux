@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/tauri-capabilities-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-minimizable",
+    "core:window:allow-set-size",
+    "core:window:allow-inner-size",
+    "core:window:allow-set-min-size",
+    "core:window:allow-set-resizable",
+    "core:window:allow-outer-position",
+    "core:window:allow-set-position",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-always-on-top"
+  ]
+}
