@@ -17,7 +17,7 @@ android {
     compileSdk = 36
     namespace = "com.superflux.app"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "com.superflux.app"
         minSdk = 24
         targetSdk = 36
@@ -54,7 +54,7 @@ android {
 }
 
 rust {
-    rootDirRel = "../../../"
+    rootDirRel = "../../../../"
 }
 
 dependencies {

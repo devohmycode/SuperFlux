@@ -26,6 +26,7 @@ interface SourcePanelProps {
   onSync: () => void;
   isSyncing: boolean;
   syncProgress: number;
+  syncError: string | null;
   onCreateFolder: (categoryId: string, name: string, parentPath?: string) => void;
   onRenameFolder: (categoryId: string, oldPath: string, newName: string) => void;
   onDeleteFolder: (categoryId: string, path: string) => void;
@@ -103,6 +104,7 @@ export function SourcePanel({
   onSync,
   isSyncing,
   syncProgress,
+  syncError,
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
@@ -509,6 +511,13 @@ export function SourcePanel({
           })}
         </div>
       </div>
+
+      {syncError && (
+        <div className="sync-error-banner" title={syncError}>
+          <span className="sync-error-icon">⚠</span>
+          <span className="sync-error-text">{syncError}</span>
+        </div>
+      )}
 
       <div className="source-panel-footer">
         <SyncButton

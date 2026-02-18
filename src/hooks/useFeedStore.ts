@@ -307,7 +307,8 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
       try {
         await syncFeed(feed.id);
       } catch (e) {
-        errors.push(feed.name);
+        const reason = e instanceof Error ? e.message : String(e);
+        errors.push(`${feed.name} (${reason})`);
       }
       completed++;
       setSyncProgress((completed / feeds.length) * 100);
@@ -317,7 +318,7 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setLastSyncTime(new Date());
 
     if (errors.length > 0) {
-      setSyncError(`Échec de synchronisation: ${errors.join(', ')}`);
+      setSyncError(`Échec: ${errors.join(' · ')}`);
     }
   }, [feeds, syncFeed]);
 

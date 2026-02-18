@@ -299,6 +299,7 @@ export default function App() {
                   onSync={handleSyncAll}
                   isSyncing={store.isSyncing}
                   syncProgress={store.syncProgress}
+                  syncError={store.syncError}
                   onCreateFolder={store.createFolder}
                   onRenameFolder={store.renameFolder}
                   onDeleteFolder={store.deleteFolder}

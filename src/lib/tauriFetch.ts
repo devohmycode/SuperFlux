@@ -2,11 +2,19 @@ import { invoke } from '@tauri-apps/api/core';
 
 export const isTauri = '__TAURI_INTERNALS__' in window;
 
+// Diagnostic: log Tauri runtime status at startup
+console.log('[tauriFetch] isTauri:', isTauri, '| __TAURI_INTERNALS__:', '__TAURI_INTERNALS__' in window);
+
 const PROXY_URL = 'http://localhost:3001/?url=';
 
 export async function fetchViaBackend(url: string): Promise<string> {
   if (isTauri) {
-    return invoke<string>('fetch_url', { targetUrl: url });
+    try {
+      return await invoke<string>('fetch_url', { targetUrl: url });
+    } catch (e) {
+      console.error(`[tauriFetch] invoke fetch_url failed for ${url}:`, e);
+      throw e;
+    }
   }
   // Fallback to proxy for pure browser dev
   const response = await fetch(`${PROXY_URL}${encodeURIComponent(url)}`);

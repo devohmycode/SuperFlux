@@ -2,19 +2,24 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, USER_AGENT};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{LogicalSize, Manager, PhysicalPosition, PhysicalSize};
+#[cfg(not(target_os = "android"))]
+use tauri::{LogicalSize, PhysicalPosition, PhysicalSize};
+use tauri::Manager;
 use url::Url;
 
 const RSS_USER_AGENT: &str = "SuperFlux/1.0 (RSS Reader; +https://github.com/user/superflux)";
 const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+#[cfg(not(target_os = "android"))]
 const COLLAPSED_HEIGHT: f64 = 52.0;
 
+#[cfg(not(target_os = "android"))]
 struct SavedGeometry {
     size: PhysicalSize<u32>,
     pos: PhysicalPosition<i32>,
 }
 
 struct AppState {
+    #[cfg(not(target_os = "android"))]
     saved: Mutex<Option<SavedGeometry>>,
 }
 
@@ -60,29 +65,47 @@ fn get_headers_for_url(url: &Url) -> HeaderMap {
 
 #[tauri::command]
 async fn fetch_url(target_url: String) -> Result<String, String> {
-    let parsed = Url::parse(&target_url).map_err(|e| format!("Invalid URL: {e}"))?;
+    eprintln!("[fetch_url] Fetching: {target_url}");
+
+    let parsed = Url::parse(&target_url).map_err(|e| {
+        eprintln!("[fetch_url] Invalid URL: {e}");
+        format!("Invalid URL: {e}")
+    })?;
     let headers = get_headers_for_url(&parsed);
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+        .map_err(|e| {
+            eprintln!("[fetch_url] Failed to create HTTP client: {e}");
+            format!("Failed to create HTTP client: {e}")
+        })?;
 
     let response = client
         .get(&target_url)
         .headers(headers)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|e| {
+            eprintln!("[fetch_url] Request failed for {target_url}: {e}");
+            format!("Request failed: {e}")
+        })?;
 
-    if !response.status().is_success() {
-        return Err(format!("HTTP {}", response.status().as_u16()));
+    let status = response.status();
+    eprintln!("[fetch_url] Response status: {status} for {target_url}");
+
+    if !status.is_success() {
+        return Err(format!("HTTP {}", status.as_u16()));
     }
 
     response
         .text()
         .await
-        .map_err(|e| format!("Failed to read response body: {e}"))
+        .map_err(|e| {
+            eprintln!("[fetch_url] Failed to read body for {target_url}: {e}");
+            format!("Failed to read response body: {e}")
+        })
 }
 
 #[derive(Serialize)]
@@ -160,6 +183,7 @@ fn open_external(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("Failed to open URL: {e}"))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn collapse_window(window: tauri::WebviewWindow, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let size = window.outer_size().map_err(|e| format!("outer_size: {e}"))?;
@@ -188,6 +212,7 @@ fn collapse_window(window: tauri::WebviewWindow, state: tauri::State<'_, AppStat
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn expand_window(window: tauri::WebviewWindow, state: tauri::State<'_, AppState>) -> Result<(), String> {
     eprintln!("[expand] restoring window");
@@ -218,18 +243,34 @@ fn expand_window(window: tauri::WebviewWindow, state: tauri::State<'_, AppState>
     Ok(())
 }
 
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn collapse_window() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn expand_window() -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
+            #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window])
-        .setup(|app| {
-            let window = app.get_webview_window("main").expect("main window not found");
-            window.set_minimizable(true).ok();
-            window.set_maximizable(true).ok();
-            window.set_closable(true).ok();
+        .setup(|_app| {
+            #[cfg(not(target_os = "android"))]
+            {
+                let window = _app.get_webview_window("main").expect("main window not found");
+                window.set_minimizable(true).ok();
+                window.set_maximizable(true).ok();
+                window.set_closable(true).ok();
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
