@@ -1,13 +1,45 @@
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, USER_AGENT};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 #[cfg(not(target_os = "android"))]
 use tauri::{LogicalSize, PhysicalPosition, PhysicalSize};
+#[cfg(not(target_os = "android"))]
+use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 use tauri::Manager;
 use url::Url;
 
 const RSS_USER_AGENT: &str = "SuperFlux/1.0 (RSS Reader; +https://github.com/user/superflux)";
+
+/// Force DWM to repaint the window backdrop (Mica/Acrylic/Blur).
+/// Without this, Windows drops the effect on move/resize.
+#[cfg(target_os = "windows")]
+fn force_dwm_repaint(window: &tauri::WebviewWindow) {
+    extern "system" {
+        fn SetWindowPos(
+            hwnd: isize, after: isize,
+            x: i32, y: i32, cx: i32, cy: i32, flags: u32,
+        ) -> i32;
+    }
+    const SWP_NOMOVE: u32 = 0x0002;
+    const SWP_NOSIZE: u32 = 0x0001;
+    const SWP_NOZORDER: u32 = 0x0004;
+    const SWP_FRAMECHANGED: u32 = 0x0020;
+    const SWP_NOACTIVATE: u32 = 0x0010;
+
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            SetWindowPos(
+                hwnd.0 as isize, 0, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE,
+            );
+        }
+    }
+}
+
+/// Track whether a window effect is active so we know to repaint on move.
+#[cfg(not(target_os = "android"))]
+static EFFECT_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 #[cfg(not(target_os = "android"))]
 const COLLAPSED_HEIGHT: f64 = 52.0;
@@ -21,6 +53,25 @@ struct SavedGeometry {
 struct AppState {
     #[cfg(not(target_os = "android"))]
     saved: Mutex<Option<SavedGeometry>>,
+}
+
+// Shared HTTP client — created once, reused for all requests (connection pooling)
+static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+fn get_or_init_client() -> Result<&'static reqwest::Client, String> {
+    if let Some(c) = HTTP_CLIENT.get() {
+        return Ok(c);
+    }
+    eprintln!("[http] Initializing shared HTTP client...");
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+    eprintln!("[http] Shared HTTP client initialized OK");
+    let _ = HTTP_CLIENT.set(client);
+    Ok(HTTP_CLIENT.get().unwrap())
 }
 
 fn get_headers_for_url(url: &Url) -> HeaderMap {
@@ -63,6 +114,38 @@ fn get_headers_for_url(url: &Url) -> HeaderMap {
     headers
 }
 
+/// Quick network connectivity check — returns diagnostic info
+#[tauri::command]
+async fn check_network() -> Result<String, String> {
+    eprintln!("[check_network] Running network diagnostic...");
+
+    let client = get_or_init_client()?;
+
+    // Test 1: simple HTTPS GET
+    let test_url = "https://httpbin.org/get";
+    match client.get(test_url).send().await {
+        Ok(resp) => {
+            let status = resp.status();
+            eprintln!("[check_network] {test_url} → {status}");
+            Ok(format!("OK: {test_url} → HTTP {status}"))
+        }
+        Err(e) => {
+            let msg = format!("{test_url} → {e}");
+            eprintln!("[check_network] FAIL: {msg}");
+            // Try to give more detail
+            if e.is_connect() {
+                Err(format!("Connection failed (DNS or firewall?): {e}"))
+            } else if e.is_timeout() {
+                Err(format!("Timeout: {e}"))
+            } else if e.is_request() {
+                Err(format!("TLS/Request error: {e}"))
+            } else {
+                Err(format!("Network error: {e}"))
+            }
+        }
+    }
+}
+
 #[tauri::command]
 async fn fetch_url(target_url: String) -> Result<String, String> {
     eprintln!("[fetch_url] Fetching: {target_url}");
@@ -73,14 +156,7 @@ async fn fetch_url(target_url: String) -> Result<String, String> {
     })?;
     let headers = get_headers_for_url(&parsed);
 
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| {
-            eprintln!("[fetch_url] Failed to create HTTP client: {e}");
-            format!("Failed to create HTTP client: {e}")
-        })?;
+    let client = get_or_init_client()?;
 
     let response = client
         .get(&target_url)
@@ -88,8 +164,17 @@ async fn fetch_url(target_url: String) -> Result<String, String> {
         .send()
         .await
         .map_err(|e| {
-            eprintln!("[fetch_url] Request failed for {target_url}: {e}");
-            format!("Request failed: {e}")
+            let detail = if e.is_connect() {
+                format!("Connection failed: {e}")
+            } else if e.is_timeout() {
+                format!("Timeout: {e}")
+            } else if e.is_request() {
+                format!("TLS/Request error: {e}")
+            } else {
+                format!("Request failed: {e}")
+            };
+            eprintln!("[fetch_url] {detail} for {target_url}");
+            detail
         })?;
 
     let status = response.status();
@@ -122,10 +207,7 @@ async fn http_request(
     headers: HashMap<String, String>,
     body: Option<String>,
 ) -> Result<HttpResponse, String> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+    let client = get_or_init_client()?;
 
     let mut req = match method.to_uppercase().as_str() {
         "GET" => client.get(&url),
@@ -255,6 +337,64 @@ fn expand_window() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn set_window_effect(
+    window: tauri::WebviewWindow,
+    effect: String,
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+) -> Result<(), String> {
+    eprintln!("[set_window_effect] effect={effect}, color=({r},{g},{b},{a})");
+
+    if effect == "none" {
+        EFFECT_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+        window
+            .set_effects(EffectsBuilder::new().build())
+            .map_err(|e| format!("clear effects: {e}"))?;
+    } else {
+        let eff = match effect.as_str() {
+            "mica" => Effect::Mica,
+            "mica-dark" => Effect::MicaDark,
+            "mica-light" => Effect::MicaLight,
+            "acrylic" => Effect::Acrylic,
+            "tabbed" => Effect::Tabbed,
+            "blur" => Effect::Blur,
+            other => return Err(format!("Unknown effect: {other}")),
+        };
+        window
+            .set_effects(
+                EffectsBuilder::new()
+                    .effect(eff)
+                    .state(EffectState::Active)
+                    .color(Color(r, g, b, a))
+                    .build(),
+            )
+            .map_err(|e| format!("set_effects: {e}"))?;
+        EFFECT_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(target_os = "windows")]
+    force_dwm_repaint(&window);
+
+    eprintln!("[set_window_effect] Effect {effect} applied OK");
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn set_window_effect(
+    _effect: String,
+    _r: u8,
+    _g: u8,
+    _b: u8,
+    _a: u8,
+) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -262,7 +402,7 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window, check_network, set_window_effect])
         .setup(|_app| {
             #[cfg(not(target_os = "android"))]
             {
@@ -270,6 +410,22 @@ pub fn run() {
                 window.set_minimizable(true).ok();
                 window.set_maximizable(true).ok();
                 window.set_closable(true).ok();
+
+                // Re-apply DWM backdrop after every move/resize so the effect persists
+                #[cfg(target_os = "windows")]
+                {
+                    let win = window.clone();
+                    window.on_window_event(move |event| {
+                        match event {
+                            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                                if EFFECT_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                                    force_dwm_repaint(&win);
+                                }
+                            }
+                            _ => {}
+                        }
+                    });
+                }
             }
             Ok(())
         })

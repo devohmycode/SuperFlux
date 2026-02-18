@@ -4127,3 +4127,100 @@ mark.highlight-pulse {
     background: var(--bg-hover);
     color: var(--text-secondary);
 }
+
+/* ═══════════════════════════════════════════════
+   Window Effects — Acrylic / Mica / Blur
+   ═══════════════════════════════════════════════ */
+
+:root {
+    --window-opacity-pct: 100%;
+}
+
+/* Entire background chain must be transparent for the native effect to show */
+html.window-effect-active,
+html.window-effect-active body,
+html.window-effect-active #root {
+    background: transparent !important;
+}
+
+html.window-effect-active .app-wrapper {
+    background: transparent;
+}
+
+html.window-effect-active .app {
+    background: color-mix(in srgb, var(--bg-root) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .titlebar {
+    background: color-mix(in srgb, var(--bg-surface) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .titlebar--collapsed {
+    background: color-mix(in srgb, var(--bg-surface) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .source-panel {
+    background: color-mix(in srgb, var(--bg-surface) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .feed-panel {
+    background: color-mix(in srgb, var(--bg-root) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .reader-panel {
+    background: color-mix(in srgb, var(--bg-surface) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .panel-strip {
+    background: color-mix(in srgb, var(--bg-surface) var(--window-opacity-pct), transparent);
+}
+
+html.window-effect-active .panel-strip:hover {
+    background: color-mix(in srgb, var(--bg-hover) var(--window-opacity-pct), transparent);
+}
+
+/* ── Opacity slider in settings ── */
+
+.settings-opacity-slider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-sm);
+}
+
+.settings-opacity-slider input[type="range"] {
+    flex: 1;
+    height: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--border-default);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.settings-opacity-slider input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-surface);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.settings-opacity-slider input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.settings-opacity-value {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    min-width: 36px;
+    text-align: right;
+}

@@ -18,14 +18,14 @@
         "minWidth": 900,
         "minHeight": 50,
         "decorations": false,
+        "transparent": true,
         "minimizable": true,
         "maximizable": true,
         "closable": true
       }
     ],
     "security": {
-      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost asset: https://asset.localhost https://*.supabase.co wss://*.supabase.co ws://localhost:* http://localhost:*; frame-src https: http:",
-      "dangerousDisableAssetCspModification": true
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost asset: https://asset.localhost https://*.supabase.co wss://*.supabase.co; frame-src https: http:"
     }
   },
   "bundle": {

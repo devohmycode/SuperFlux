@@ -16,7 +16,7 @@ import {
 } from './ui/breadcrumb';
 
 type ViewMode = 'reader' | 'web';
-type IframeStatus = 'idle' | 'loading' | 'loaded' | 'blocked';
+type IframeStatus = 'idle' | 'loading' | 'loaded' | 'blocked' | 'error';
 type RedditCommentsStatus = 'idle' | 'loading' | 'success' | 'error';
 type TtsStatus = 'idle' | 'playing' | 'paused';
 
@@ -187,6 +187,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   const [selectedText, setSelectedText] = useState('');
   const [selectedPrefix, setSelectedPrefix] = useState('');
   const [selectedSuffix, setSelectedSuffix] = useState('');
+  const [webHtml, setWebHtml] = useState<string | null>(null);
   const [highlightsMenuOpen, setHighlightsMenuOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
@@ -212,6 +213,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   useEffect(() => {
     setViewMode('reader');
     setIframeStatus('idle');
+    setWebHtml(null);
     if (probeTimerRef.current) clearTimeout(probeTimerRef.current);
     // Reset or restore summary
     if (item?.summary) {
@@ -419,7 +421,6 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   }, [item, editingNoteId, noteText, onHighlightNoteUpdate]);
 
   const hasValidUrl = item?.url && item.url !== '#';
-  const commentsUrl = item ? getCommentsUrl(item) : null;
   const redditComments = item?.source === 'reddit' ? redditCommentsState.comments : [];
   const displayedCommentCount = item?.source === 'reddit'
     ? (redditCommentsState.count ?? item.commentCount ?? redditComments.length)
@@ -491,11 +492,24 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     };
   }, [item]);
 
-  const handleWebView = useCallback(() => {
-    if (!hasValidUrl) return;
+  const handleWebView = useCallback(async () => {
+    if (!hasValidUrl || !item?.url) return;
     setViewMode('web');
     setIframeStatus('loading');
-  }, [hasValidUrl]);
+    setWebHtml(null);
+
+    try {
+      const html = await fetchViaBackend(item.url);
+      // Inject a <base> tag so relative URLs resolve correctly
+      const baseTag = `<base href="${item.url}">`;
+      const injected = html.replace(/(<head[^>]*>)/i, `$1${baseTag}`);
+      setWebHtml(injected);
+      setIframeStatus('loaded');
+    } catch (e) {
+      console.error('[ReaderPanel] web fetch failed:', e);
+      setIframeStatus('error');
+    }
+  }, [hasValidUrl, item?.url]);
 
   const handleReaderView = useCallback(() => {
     setViewMode('reader');
@@ -568,23 +582,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   }, []);
 
   const handleRefresh = useCallback(() => {
-    if (iframeRef.current && item?.url) {
-      setIframeStatus('loading');
-      iframeRef.current.src = item.url;
+    if (item?.url) {
+      handleWebView();
     }
-  }, [item?.url]);
+  }, [item?.url, handleWebView]);
 
   const handleOpenExternal = useCallback(() => {
     if (item?.url && item.url !== '#') {
       openExternal(item.url);
     }
   }, [item?.url]);
-
-  const handleOpenComments = useCallback(() => {
-    if (commentsUrl) {
-      openExternal(commentsUrl);
-    }
-  }, [commentsUrl]);
 
   const handleFetchFullContent = useCallback(async () => {
     if (!item || fullContentStatus === 'loading' || !item.url || item.url === '#') return;
@@ -1099,19 +1106,6 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
 
             {hasValidUrl && (
               <div className="reader-footer">
-                <button className="reader-webview-link" onClick={handleWebView}>
-                  <span className="webview-link-icon">◎</span>
-                  Lire sur le site original
-                </button>
-                {commentsUrl && (
-                  <button
-                    className="reader-comments-link"
-                    onClick={handleOpenComments}
-                    type="button"
-                  >
-                    Voir les commentaires sur Reddit ↗
-                  </button>
-                )}
                 <button className="reader-original-link" onClick={handleOpenExternal}>
                   Ouvrir dans le navigateur ↗
                 </button>
@@ -1143,9 +1137,9 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             )}
           </AnimatePresence>
 
-          {/* Blocked state — full overlay */}
+          {/* Error state — fetch failed */}
           <AnimatePresence>
-            {iframeStatus === 'blocked' && (
+            {(iframeStatus === 'blocked' || iframeStatus === 'error') && (
               <motion.div
                 className="webview-error"
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -1156,7 +1150,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 <span className="webview-error-icon">⊘</span>
                 <h3 className="webview-error-title">Page non disponible</h3>
                 <p className="webview-error-text">
-                  Ce site bloque l'affichage intégré (X-Frame-Options).
+                  Impossible de charger cette page.
                 </p>
                 <div className="webview-error-actions">
                   <button className="webview-error-btn primary" onClick={handleOpenExternal}>
@@ -1193,16 +1187,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             )}
           </AnimatePresence>
 
-          <iframe
-            ref={iframeRef}
-            className="webview-iframe"
-            src={item.url}
-            title={item.title}
-            onLoad={handleIframeLoad}
-            onError={handleIframeError}
-            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-            referrerPolicy="no-referrer"
-          />
+          {webHtml && (
+            <iframe
+              ref={iframeRef}
+              className="webview-iframe"
+              srcDoc={webHtml}
+              title={item.title}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+              referrerPolicy="no-referrer"
+            />
+          )}
         </div>
       )}
 

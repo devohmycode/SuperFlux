@@ -1,14 +1,27 @@
 import { invoke } from '@tauri-apps/api/core';
 
-export const isTauri = '__TAURI_INTERNALS__' in window;
+/** Runtime check — avoids race condition with module-level const */
+export function isTauri(): boolean {
+  return '__TAURI_INTERNALS__' in window;
+}
 
-// Diagnostic: log Tauri runtime status at startup
-console.log('[tauriFetch] isTauri:', isTauri, '| __TAURI_INTERNALS__:', '__TAURI_INTERNALS__' in window);
+// Diagnostic at startup (deferred to ensure Tauri runtime is ready)
+setTimeout(() => {
+  const detected = isTauri();
+  console.log('[tauriFetch] isTauri:', detected);
+  if (detected) {
+    invoke<string>('check_network')
+      .then(r => console.log('[tauriFetch] Network OK:', r))
+      .catch(e => console.error('[tauriFetch] Network FAIL:', e));
+  } else {
+    console.warn('[tauriFetch] Tauri runtime NOT detected — falling back to proxy');
+  }
+}, 0);
 
 const PROXY_URL = 'http://localhost:3001/?url=';
 
 export async function fetchViaBackend(url: string): Promise<string> {
-  if (isTauri) {
+  if (isTauri()) {
     try {
       return await invoke<string>('fetch_url', { targetUrl: url });
     } catch (e) {
@@ -40,7 +53,7 @@ export interface HttpResponseData {
 const PROXY_API_URL = 'http://localhost:3001/api';
 
 export async function httpRequest(opts: HttpRequestOptions): Promise<HttpResponseData> {
-  if (isTauri) {
+  if (isTauri()) {
     return invoke<HttpResponseData>('http_request', {
       method: opts.method,
       url: opts.url,
@@ -67,7 +80,7 @@ export async function httpRequest(opts: HttpRequestOptions): Promise<HttpRespons
 
 /** Open a URL in the system's default browser (not inside Tauri) */
 export async function openExternal(url: string): Promise<void> {
-  if (isTauri) {
+  if (isTauri()) {
     await invoke('open_external', { url });
   } else {
     window.open(url, '_blank', 'noopener,noreferrer');

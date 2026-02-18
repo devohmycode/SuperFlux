@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { invoke } from '@tauri-apps/api/core';
 import type { FeedSource } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from './AuthModal';
@@ -19,6 +20,46 @@ interface OpmlFeed {
   xmlUrl: string;
   htmlUrl?: string;
   category?: string;
+}
+
+type WindowEffect = 'none' | 'mica' | 'acrylic' | 'tabbed' | 'blur';
+
+function getStoredEffect(): WindowEffect {
+  return (localStorage.getItem('superflux_window_effect') as WindowEffect) || 'none';
+}
+
+function getStoredOpacity(): number {
+  const v = localStorage.getItem('superflux_window_opacity');
+  return v ? Number(v) : 85;
+}
+
+let _effectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function applyWindowEffect(effect: WindowEffect, opacity: number) {
+  // Apply CSS immediately for instant visual feedback
+  if (effect !== 'none') {
+    document.documentElement.classList.add('window-effect-active');
+    document.documentElement.style.setProperty('--window-opacity-pct', `${opacity}%`);
+  } else {
+    document.documentElement.classList.remove('window-effect-active');
+    document.documentElement.style.setProperty('--window-opacity-pct', '100%');
+  }
+
+  // Debounce the native effect call (triggers a resize nudge for DWM repaint)
+  if (_effectTimer) clearTimeout(_effectTimer);
+  _effectTimer = setTimeout(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    const base = isDark ? 20 : 240;
+    const alpha = Math.round((opacity / 100) * 200);
+
+    invoke('set_window_effect', {
+      effect,
+      r: base,
+      g: base,
+      b: base,
+      a: alpha,
+    }).catch((e) => console.warn('[settings] set_window_effect failed:', e));
+  }, 150);
 }
 
 function detectSource(feed: OpmlFeed): FeedSource {
@@ -80,6 +121,10 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
   const [pullError, setPullError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Appearance state ──
+  const [windowEffect, setWindowEffect] = useState<WindowEffect>(getStoredEffect);
+  const [windowOpacity, setWindowOpacity] = useState(getStoredOpacity);
+
   // ── Provider state ──
   const [providerConfig, setProviderConfig] = useState<ProviderConfig | null>(() => getProviderConfig());
   const [providerType, setProviderType] = useState<ProviderType | null>(() => providerConfig?.type ?? null);
@@ -91,6 +136,24 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
   const [providerTestStatus, setProviderTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [providerImportStatus, setProviderImportStatus] = useState<string | null>(null);
   const [providerImporting, setProviderImporting] = useState(false);
+
+  // Apply window effect on mount (restore saved settings)
+  useEffect(() => {
+    applyWindowEffect(windowEffect, windowOpacity);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleEffectChange = useCallback((effect: WindowEffect) => {
+    setWindowEffect(effect);
+    localStorage.setItem('superflux_window_effect', effect);
+    applyWindowEffect(effect, windowOpacity);
+  }, [windowOpacity]);
+
+  const handleOpacityChange = useCallback((opacity: number) => {
+    setWindowOpacity(opacity);
+    localStorage.setItem('superflux_window_opacity', String(opacity));
+    applyWindowEffect(windowEffect, opacity);
+  }, [windowEffect]);
 
   const refreshOllamaStatus = useCallback(() => {
     checkOllamaStatus(llmConfig.ollamaUrl).then(setOllamaStatus);
@@ -327,6 +390,51 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
                   )}
                 </div>
               )}
+
+              {/* ── Apparence ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Apparence</h3>
+                <p className="settings-section-desc">
+                  Personnalisez l'effet de fenêtre et la transparence de l'interface.
+                </p>
+
+                <label className="settings-label">Effet de fenêtre</label>
+                <div className="settings-format-toggle">
+                  {([
+                    ['none', 'Aucun'],
+                    ['mica', 'Mica'],
+                    ['acrylic', 'Acrylic'],
+                    ['blur', 'Blur'],
+                    ['tabbed', 'Tabbed'],
+                  ] as [WindowEffect, string][]).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={`format-option ${windowEffect === value ? 'active' : ''}`}
+                      onClick={() => handleEffectChange(value)}
+                    >
+                      <span className="format-option-label">{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {windowEffect !== 'none' && (
+                  <>
+                    <label className="settings-label" style={{ marginTop: 12 }}>
+                      Opacité du fond
+                    </label>
+                    <div className="settings-opacity-slider">
+                      <input
+                        type="range"
+                        min={1}
+                        max={100}
+                        value={windowOpacity}
+                        onChange={(e) => handleOpacityChange(Number(e.target.value))}
+                      />
+                      <span className="settings-opacity-value">{windowOpacity}%</span>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* ── Fournisseur RSS ── */}
               <div className="settings-section">
