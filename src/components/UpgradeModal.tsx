@@ -80,6 +80,7 @@ export function UpgradeModal() {
                 </p>
                 <ul style={{ margin: '12px 0', paddingLeft: 20, lineHeight: 1.8 }}>
                   <li>Résumés IA illimités</li>
+                  <li>Surlignage et notes sur les articles</li>
                   <li>Plus de 50 flux RSS</li>
                   <li>Plus de 10 dossiers</li>
                   <li>Accès anticipé aux nouvelles fonctionnalités</li>
@@ -90,7 +91,7 @@ export function UpgradeModal() {
                   style={{ width: '100%', marginBottom: 16 }}
                   onClick={() => openExternal(LEMONSQUEEZY_CHECKOUT_URL)}
                 >
-                  Acheter une licence Pro
+                  Acheter une licence Pro — 4,99 €
                 </button>
               </div>
 

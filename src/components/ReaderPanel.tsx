@@ -795,11 +795,13 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               <div style={{ position: 'relative' }}>
                 <button
                   className="reader-tool-btn highlights-btn"
-                  title="Surlignages"
-                  onClick={() => setHighlightsMenuOpen(prev => !prev)}
+                  title={isPro ? "Surlignages" : "Surlignages (Pro)"}
+                  onClick={isPro ? () => setHighlightsMenuOpen(prev => !prev) : showUpgradeModal}
                 >
-                  <span style={{ fontSize: '13px' }}>🖍</span>
-                  {(highlights?.length ?? 0) > 0 && (
+                  {isPro ? (
+                    <span style={{ fontSize: '13px' }}>🖍</span>
+                  ) : '🔒'}
+                  {isPro && (highlights?.length ?? 0) > 0 && (
                     <span className="highlights-badge">{highlights!.length}</span>
                   )}
                 </button>
@@ -1056,7 +1058,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             <div
               className="reader-body"
               ref={readerBodyRef}
-              onMouseUp={handleTextSelection}
+              onMouseUp={isPro ? handleTextSelection : undefined}
               dangerouslySetInnerHTML={{ __html: processedHtml }}
             />
 
