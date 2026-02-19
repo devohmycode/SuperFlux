@@ -1,7 +1,9 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import type { FeedCategory, FeedItem, FeedSource } from '../types';
 import MorphingPageDots from './ui/morphing-page-dots';
+import { usePro } from '../contexts/ProContext';
+import { summarizeDigest } from '../services/llmService';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -108,18 +110,25 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
 }
 
 export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onToggleRead, onToggleStar, onToggleBookmark, onClose }: FeedPanelProps) {
+  const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FeedItem } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // ── Digest IA ──
+  const [digestState, setDigestState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [digestText, setDigestText] = useState('');
+  const [digestError, setDigestError] = useState('');
+  const [digestOpen, setDigestOpen] = useState(true);
+
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(0);
   const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
 
-  // Reset to page 0 when items source changes
+  // Reset to page 0 and digest when items source changes
   const itemsKey = `${selectedFeedId}-${selectedSource}-${showFavorites}-${showReadLater}`;
-  useEffect(() => { setCurrentPage(0); }, [itemsKey]);
+  useEffect(() => { setCurrentPage(0); setDigestState('idle'); setDigestText(''); setDigestError(''); }, [itemsKey]);
 
   // Clamp page if items shrink
   useEffect(() => {
@@ -137,6 +146,26 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, item });
   }, []);
+
+  const handleDigest = useCallback(async () => {
+    if (digestState === 'loading' || items.length === 0) return;
+    setDigestState('loading');
+    setDigestError('');
+    setDigestOpen(true);
+    try {
+      const articles = items.slice(0, 30).map(i => ({
+        title: i.title,
+        excerpt: i.excerpt || '',
+        feedName: i.feedName,
+      }));
+      const result = await summarizeDigest(articles);
+      setDigestText(result);
+      setDigestState('done');
+    } catch (e) {
+      setDigestError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setDigestState('error');
+    }
+  }, [digestState, items]);
 
   // Close on click outside or Escape
   useEffect(() => {
@@ -173,6 +202,14 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
         </div>
         <div className="feed-panel-actions">
           <button
+            className={`feed-action-btn ${digestState === 'loading' ? 'loading' : ''}`}
+            title={isPro ? "Résumer l'actualité" : "Résumer (Pro)"}
+            onClick={isPro ? handleDigest : showUpgradeModal}
+            disabled={digestState === 'loading' || items.length === 0}
+          >
+            {digestState === 'loading' ? <span className="btn-spinner" /> : isPro ? '✦' : '🔒'}
+          </button>
+          <button
             className="feed-action-btn"
             title="Tout marquer comme lu"
             onClick={onMarkAllAsRead}
@@ -196,6 +233,51 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
           <button className="panel-close-btn" title="Fermer le panneau (2)" onClick={onClose}>✕</button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {digestState !== 'idle' && (
+          <motion.div
+            className="feed-digest"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <button
+              className="feed-digest-header"
+              onClick={() => setDigestOpen(prev => !prev)}
+            >
+              <span className="feed-digest-icon">✦</span>
+              <span className="feed-digest-title">Digest IA</span>
+              <span className={`feed-digest-chevron ${digestOpen ? 'open' : ''}`}>›</span>
+            </button>
+            <AnimatePresence>
+              {digestOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {digestState === 'loading' && (
+                    <div className="feed-digest-loading">
+                      <div className="feed-digest-pulse" />
+                      <div className="feed-digest-pulse short" />
+                      <div className="feed-digest-pulse" />
+                    </div>
+                  )}
+                  {digestState === 'done' && (
+                    <div className="feed-digest-content">{digestText}</div>
+                  )}
+                  {digestState === 'error' && (
+                    <div className="feed-digest-error">{digestError}</div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="feed-panel-list">
         {items.length === 0 && (

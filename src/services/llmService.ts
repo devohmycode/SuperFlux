@@ -152,6 +152,33 @@ export async function summarizeArticle(
   return callGroq(config, systemPrompt, userMessage);
 }
 
+// --- Digest multi-articles ---
+export interface DigestArticle {
+  title: string;
+  excerpt: string;
+  feedName: string;
+}
+
+const DIGEST_SYSTEM_PROMPT =
+  "Tu es un assistant éditorial. À partir de la liste d'articles de flux RSS ci-dessous, identifie les 3 à 5 informations les plus importantes et rédige un briefing concis en français, sous forme de liste à puces. Chaque point doit citer la source.";
+
+export async function summarizeDigest(articles: DigestArticle[]): Promise<string> {
+  const config = getLLMConfig();
+
+  const lines = articles.slice(0, 30).map(
+    (a, i) => `${i + 1}. [${a.feedName}] ${a.title}\n   ${a.excerpt}`
+  );
+  let userMessage = lines.join('\n\n');
+  if (userMessage.length > MAX_CONTENT_LENGTH) {
+    userMessage = userMessage.slice(0, MAX_CONTENT_LENGTH) + '...';
+  }
+
+  if (config.provider === 'ollama') {
+    return callOllama(config, DIGEST_SYSTEM_PROMPT, userMessage);
+  }
+  return callGroq(config, DIGEST_SYSTEM_PROMPT, userMessage);
+}
+
 // --- Utilitaire: vérifier si Ollama est disponible ---
 export interface OllamaStatus {
   available: boolean;
