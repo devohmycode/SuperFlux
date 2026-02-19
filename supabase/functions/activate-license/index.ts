@@ -7,103 +7,161 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface LemonResponse {
+interface LemonActivateResponse {
+  activated: boolean;
+  error?: string;
+  license_key?: { id: number; status: string; key: string };
+  instance?: { id: string; name: string };
+  meta?: { store_id: number; product_id: number };
+}
+
+interface LemonValidateResponse {
   valid: boolean;
   error?: string;
   license_key?: { id: number; status: string; key: string };
 }
 
+async function lemonFetch<T>(url: string, params: Record<string, string>): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json",
+    },
+    body: new URLSearchParams(params),
+  });
+
+  const text = await res.text();
+  console.log(`[lemon] ${url} → ${res.status}`, text.substring(0, 500));
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`LemonSqueezy returned non-JSON (HTTP ${res.status}): ${text.substring(0, 200)}`);
+  }
+}
+
 Deno.serve(async (req) => {
-  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // 1. Authenticate the user via JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return Response.json({ success: false, error: "Missing authorization" }, { status: 401, headers: corsHeaders });
+      return Response.json({ success: false, error: "Missing authorization" }, { headers: corsHeaders });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Client-scoped Supabase (to identify user)
     const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
     const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
     if (authError || !user) {
-      return Response.json({ success: false, error: "Invalid token" }, { status: 401, headers: corsHeaders });
+      return Response.json({ success: false, error: "Invalid token" }, { headers: corsHeaders });
     }
 
-    // Admin client (service_role — bypasses RLS)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // 2. Parse body
-    const { license_key, instance_id, action = "activate" } = await req.json();
+    const { license_key, instance_name, action = "activate" } = await req.json();
 
     // --- DEACTIVATE ---
     if (action === "deactivate") {
+      // Read the stored instance_id to deactivate on LemonSqueezy
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("license_key, lemon_instance_id")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.license_key && profile?.lemon_instance_id) {
+        try {
+          await lemonFetch<Record<string, unknown>>(`${LEMON_API}/deactivate`, {
+            license_key: profile.license_key,
+            instance_id: profile.lemon_instance_id,
+          });
+        } catch (e) {
+          console.error("[lemon] deactivate error (non-blocking):", e);
+        }
+      }
+
       await supabaseAdmin
         .from("profiles")
-        .update({ is_pro: false, license_key: null })
+        .update({ is_pro: false, license_key: null, lemon_instance_id: null })
         .eq("id", user.id);
 
       return Response.json({ success: true }, { headers: corsHeaders });
     }
 
     // --- ACTIVATE ---
-    if (!license_key || !instance_id) {
-      return Response.json({ success: false, error: "license_key and instance_id are required" }, { status: 400, headers: corsHeaders });
+    if (!license_key || !instance_name) {
+      return Response.json({ success: false, error: "license_key and instance_name are required" }, { headers: corsHeaders });
     }
 
-    // 3. Call LemonSqueezy activate endpoint server-side
-    const lemonRes = await fetch(`${LEMON_API}/activate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ license_key, instance_id }),
-    });
-    const lemonData: LemonResponse = await lemonRes.json();
+    // 1. Try /activate with instance_name
+    let activated = false;
+    let instanceId: string | null = null;
 
-    // If activate says already activated, try validate
-    if (!lemonData.valid && lemonData.license_key?.status !== "active") {
-      const validateRes = await fetch(`${LEMON_API}/validate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ license_key, instance_id }),
+    try {
+      const data = await lemonFetch<LemonActivateResponse>(`${LEMON_API}/activate`, {
+        license_key,
+        instance_name,
       });
-      const validateData: LemonResponse = await validateRes.json();
+      activated = data.activated || data.license_key?.status === "active";
+      instanceId = data.instance?.id ?? null;
+    } catch (e) {
+      console.error("[lemon] activate error:", e);
+    }
 
-      if (!validateData.valid) {
+    // 2. If activate failed, try /validate (key might already be active)
+    if (!activated) {
+      try {
+        const data = await lemonFetch<LemonValidateResponse>(`${LEMON_API}/validate`, {
+          license_key,
+        });
+        if (data.valid) {
+          activated = true;
+        } else {
+          return Response.json(
+            { success: false, error: data.error || "Licence invalide" },
+            { headers: corsHeaders },
+          );
+        }
+      } catch (e) {
         return Response.json(
-          { success: false, error: validateData.error || "Licence invalide" },
-          { status: 400, headers: corsHeaders },
+          { success: false, error: `Erreur LemonSqueezy: ${e instanceof Error ? e.message : "unknown"}` },
+          { headers: corsHeaders },
         );
       }
     }
 
-    // 4. License is valid — update profiles via service_role
+    // 3. License valid — update profiles via service_role
+    const updateData: Record<string, unknown> = { is_pro: true, license_key };
+    if (instanceId) updateData.lemon_instance_id = instanceId;
+
     const { error: updateError } = await supabaseAdmin
       .from("profiles")
-      .update({ is_pro: true, license_key })
+      .update(updateData)
       .eq("id", user.id);
 
     if (updateError) {
+      console.error("[db] update error:", updateError);
       return Response.json(
         { success: false, error: "Erreur lors de la mise à jour du profil" },
-        { status: 500, headers: corsHeaders },
+        { headers: corsHeaders },
       );
     }
 
     return Response.json({ success: true }, { headers: corsHeaders });
   } catch (err) {
+    console.error("[function] unhandled error:", err);
     return Response.json(
       { success: false, error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500, headers: corsHeaders },
+      { headers: corsHeaders },
     );
   }
 });
