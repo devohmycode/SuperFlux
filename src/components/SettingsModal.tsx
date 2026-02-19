@@ -8,11 +8,15 @@ import { openExternal } from '../lib/tauriFetch';
 import { getLLMConfig, saveLLMConfig, checkOllamaStatus, pullOllamaModel, type LLMConfig, type OllamaStatus, type PullProgress } from '../services/llmService';
 import { createProvider, type ProviderConfig, type ProviderType } from '../services/providers';
 import { getProviderConfig, saveProviderConfig, clearProviderConfig, ProviderSyncService } from '../services/providerSync';
+import { getTtsConfig, saveTtsConfig, speak as ttsSpeak, stop as ttsStop, type TtsEngine, type TtsConfig } from '../services/ttsService';
+import { usePro } from '../contexts/ProContext';
+import { LEMONSQUEEZY_CHECKOUT_URL, PRO_LIMITS } from '../services/licenseService';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportOpml: (feeds: { url: string; name: string; source: FeedSource }[]) => number;
+  feedCount?: number;
 }
 
 interface OpmlFeed {
@@ -49,14 +53,16 @@ function applyWindowEffect(effect: WindowEffect, opacity: number) {
   if (_effectTimer) clearTimeout(_effectTimer);
   _effectTimer = setTimeout(() => {
     const isDark = document.documentElement.classList.contains('dark');
-    const base = isDark ? 20 : 240;
+    const isSepia = document.documentElement.classList.contains('sepia');
+    let r: number, g: number, b: number;
+    if (isDark) { r = 20; g = 20; b = 20; }
+    else if (isSepia) { r = 210; g = 195; b = 170; }
+    else { r = 240; g = 240; b = 240; }
     const alpha = Math.round((opacity / 100) * 200);
 
     invoke('set_window_effect', {
       effect,
-      r: base,
-      g: base,
-      b: base,
+      r, g, b,
       a: alpha,
     }).catch((e) => console.warn('[settings] set_window_effect failed:', e));
   }, 150);
@@ -105,8 +111,34 @@ function parseOpml(xmlString: string): OpmlFeed[] {
   return feeds;
 }
 
-export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: SettingsModalProps) {
   const { user, signOut, isConfigured } = useAuth();
+  const { isPro, licenseKey, activateLicense, deactivateLicense, showUpgradeModal } = usePro();
+  const [proKeyInput, setProKeyInput] = useState('');
+  const [proActivating, setProActivating] = useState(false);
+  const [proError, setProError] = useState<string | null>(null);
+  const [proSuccess, setProSuccess] = useState(false);
+
+  const handleProActivate = useCallback(async () => {
+    if (!proKeyInput.trim()) return;
+    setProActivating(true);
+    setProError(null);
+    setProSuccess(false);
+    const result = await activateLicense(proKeyInput.trim());
+    if (result.success) {
+      setProSuccess(true);
+      setProKeyInput('');
+    } else {
+      setProError(result.error || 'Activation échouée');
+    }
+    setProActivating(false);
+  }, [proKeyInput, activateLicense]);
+
+  const handleProDeactivate = useCallback(async () => {
+    await deactivateLicense();
+    setProSuccess(false);
+    setProError(null);
+  }, [deactivateLicense]);
   const [importResult, setImportResult] = useState<{ added: number; skipped: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -120,6 +152,42 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [pullError, setPullError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── TTS state ──
+  const [ttsConfig, setTtsConfig] = useState<TtsConfig>(getTtsConfig);
+  const [ttsTestStatus, setTtsTestStatus] = useState<'idle' | 'playing'>('idle');
+
+  const handleTtsEngineChange = useCallback((engine: TtsEngine) => {
+    const updated = { ...ttsConfig, engine };
+    setTtsConfig(updated);
+    saveTtsConfig(updated);
+  }, [ttsConfig]);
+
+  const handleTtsRateChange = useCallback((rate: number) => {
+    const updated = { ...ttsConfig, rate };
+    setTtsConfig(updated);
+    saveTtsConfig(updated);
+  }, [ttsConfig]);
+
+  const handleTtsFieldChange = useCallback((field: keyof TtsConfig, value: string) => {
+    const updated = { ...ttsConfig, [field]: value };
+    setTtsConfig(updated);
+    saveTtsConfig(updated);
+  }, [ttsConfig]);
+
+  const handleTtsTest = useCallback(async () => {
+    setTtsTestStatus('playing');
+    try {
+      await ttsSpeak('Bonjour, ceci est un test de lecture vocale.', () => setTtsTestStatus('idle'));
+    } catch {
+      setTtsTestStatus('idle');
+    }
+  }, []);
+
+  const handleTtsTestStop = useCallback(() => {
+    ttsStop();
+    setTtsTestStatus('idle');
+  }, []);
 
   // ── Appearance state ──
   const [windowEffect, setWindowEffect] = useState<WindowEffect>(getStoredEffect);
@@ -288,6 +356,12 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
         source: detectSource(f),
       }));
 
+      // Pro gate: check if import would exceed feed limit
+      if (!isPro && feedCount + feedsToImport.length > PRO_LIMITS.maxFeeds) {
+        showUpgradeModal();
+        return;
+      }
+
       const added = onImportOpml(feedsToImport);
       setImportResult({
         added,
@@ -390,6 +464,72 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
                   )}
                 </div>
               )}
+
+              {/* ── Superflux Pro ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Superflux Pro</h3>
+                {isPro ? (
+                  <div className="settings-account">
+                    <div className="settings-account-info">
+                      <div className="settings-ollama-status">
+                        <span className="ollama-status-dot connected" />
+                        <span className="ollama-status-text">Pro actif</span>
+                      </div>
+                      {licenseKey && (
+                        <span className="settings-account-status">
+                          Clé : {licenseKey.slice(0, 8)}{'••••••••'}
+                        </span>
+                      )}
+                    </div>
+                    <button className="btn-secondary" onClick={handleProDeactivate}>
+                      Désactiver
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="settings-section-desc">
+                      Débloquez les résumés IA, plus de 50 flux et plus de 10 dossiers.
+                    </p>
+                    <div className="provider-form" style={{ marginTop: 8 }}>
+                      <label className="settings-label">Clé de licence</label>
+                      <input
+                        type="text"
+                        className="provider-input"
+                        placeholder="Collez votre clé de licence..."
+                        value={proKeyInput}
+                        onChange={(e) => { setProKeyInput(e.target.value); setProError(null); setProSuccess(false); }}
+                      />
+                      <div className="provider-actions">
+                        <button
+                          className="btn-primary"
+                          onClick={handleProActivate}
+                          disabled={proActivating || !proKeyInput.trim()}
+                        >
+                          {proActivating ? 'Activation...' : 'Activer'}
+                        </button>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => openExternal(LEMONSQUEEZY_CHECKOUT_URL)}
+                        >
+                          Acheter Pro
+                        </button>
+                      </div>
+                      {proError && (
+                        <div className="settings-ollama-status">
+                          <span className="ollama-status-dot disconnected" />
+                          <span className="ollama-status-text">{proError}</span>
+                        </div>
+                      )}
+                      {proSuccess && (
+                        <div className="settings-ollama-status">
+                          <span className="ollama-status-dot connected" />
+                          <span className="ollama-status-text">Licence activée avec succès</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* ── Apparence ── */}
               <div className="settings-section">
@@ -776,6 +916,99 @@ export function SettingsModal({ isOpen, onClose, onImportOpml }: SettingsModalPr
                   </button>
                 </div>
 
+              </div>
+
+              {/* ── Lecture vocale ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Lecture vocale</h3>
+                <p className="settings-section-desc">
+                  Choisissez le moteur de synthèse vocale pour la lecture des articles.
+                </p>
+
+                <label className="settings-label">Moteur</label>
+                <div className="settings-format-toggle">
+                  <button
+                    className={`format-option ${ttsConfig.engine === 'browser' ? 'active' : ''}`}
+                    onClick={() => handleTtsEngineChange('browser')}
+                  >
+                    <span className="format-option-icon">◎</span>
+                    <span className="format-option-label">Navigateur</span>
+                  </button>
+                  <button
+                    className={`format-option ${ttsConfig.engine === 'native' ? 'active' : ''}`}
+                    onClick={() => handleTtsEngineChange('native')}
+                  >
+                    <span className="format-option-icon">⌂</span>
+                    <span className="format-option-label">Natif</span>
+                  </button>
+                  <button
+                    className={`format-option ${ttsConfig.engine === 'elevenlabs' ? 'active' : ''}`}
+                    onClick={() => handleTtsEngineChange('elevenlabs')}
+                  >
+                    <span className="format-option-icon">☁</span>
+                    <span className="format-option-label">ElevenLabs</span>
+                  </button>
+                </div>
+
+                {(ttsConfig.engine === 'browser' || ttsConfig.engine === 'native') && (
+                  <>
+                    <label className="settings-label" style={{ marginTop: 12 }}>
+                      Vitesse de lecture
+                    </label>
+                    <div className="settings-opacity-slider">
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={2}
+                        step={0.1}
+                        value={ttsConfig.rate}
+                        onChange={(e) => handleTtsRateChange(Number(e.target.value))}
+                      />
+                      <span className="settings-opacity-value">{ttsConfig.rate.toFixed(1)}x</span>
+                    </div>
+                  </>
+                )}
+
+                {ttsConfig.engine === 'elevenlabs' && (
+                  <div className="provider-form" style={{ marginTop: 12 }}>
+                    <label className="settings-label">Clé API ElevenLabs</label>
+                    <input
+                      type="password"
+                      className="provider-input"
+                      placeholder="Votre clé API ElevenLabs"
+                      value={ttsConfig.elevenLabsApiKey}
+                      onChange={(e) => handleTtsFieldChange('elevenLabsApiKey', e.target.value)}
+                    />
+                    <label className="settings-label">Voice ID</label>
+                    <input
+                      type="text"
+                      className="provider-input"
+                      placeholder="21m00Tcm4TlvDq8ikWAM (Rachel)"
+                      value={ttsConfig.elevenLabsVoiceId}
+                      onChange={(e) => handleTtsFieldChange('elevenLabsVoiceId', e.target.value)}
+                    />
+                    <label className="settings-label">Modèle</label>
+                    <input
+                      type="text"
+                      className="provider-input"
+                      placeholder="eleven_multilingual_v2"
+                      value={ttsConfig.elevenLabsModelId}
+                      onChange={(e) => handleTtsFieldChange('elevenLabsModelId', e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="provider-actions" style={{ marginTop: 12 }}>
+                  {ttsTestStatus === 'idle' ? (
+                    <button className="btn-secondary" onClick={handleTtsTest}>
+                      Tester
+                    </button>
+                  ) : (
+                    <button className="btn-secondary" onClick={handleTtsTestStop}>
+                      Arrêter le test
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="settings-section">

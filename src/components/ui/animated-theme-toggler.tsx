@@ -1,8 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Moon, Sun } from "lucide-react"
+import { Moon, Sun, Sunrise } from "lucide-react"
 import { flushSync } from "react-dom"
 
 import { cn } from "@/lib/utils"
+
+type Theme = "light" | "sepia" | "dark"
+
+const THEME_ORDER: Theme[] = ["light", "sepia", "dark"]
+
+function getTheme(): Theme {
+  if (document.documentElement.classList.contains("dark")) return "dark"
+  if (document.documentElement.classList.contains("sepia")) return "sepia"
+  return "light"
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.remove("dark", "sepia")
+  if (theme !== "light") {
+    document.documentElement.classList.add(theme)
+  }
+  localStorage.setItem("theme", theme)
+}
+
+const ThemeIcon = ({ theme }: { theme: Theme }) => {
+  if (theme === "dark") return <Moon />
+  if (theme === "sepia") return <Sunrise />
+  return <Sun />
+}
 
 interface AnimatedThemeTogglerProps extends React.ComponentPropsWithoutRef<"button"> {
   duration?: number
@@ -13,14 +37,11 @@ export const AnimatedThemeToggler = ({
   duration = 400,
   ...props
 }: AnimatedThemeTogglerProps) => {
-  const [isDark, setIsDark] = useState(false)
+  const [theme, setTheme] = useState<Theme>("light")
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    const updateTheme = () => {
-      setIsDark(document.documentElement.classList.contains("dark"))
-    }
-
+    const updateTheme = () => setTheme(getTheme())
     updateTheme()
 
     const observer = new MutationObserver(updateTheme)
@@ -35,12 +56,13 @@ export const AnimatedThemeToggler = ({
   const toggleTheme = useCallback(async () => {
     if (!buttonRef.current) return
 
+    const currentIndex = THEME_ORDER.indexOf(theme)
+    const nextTheme = THEME_ORDER[(currentIndex + 1) % THEME_ORDER.length]
+
     await document.startViewTransition(() => {
       flushSync(() => {
-        const newTheme = !isDark
-        setIsDark(newTheme)
-        document.documentElement.classList.toggle("dark")
-        localStorage.setItem("theme", newTheme ? "dark" : "light")
+        setTheme(nextTheme)
+        applyTheme(nextTheme)
       })
     }).ready
 
@@ -66,7 +88,7 @@ export const AnimatedThemeToggler = ({
         pseudoElement: "::view-transition-new(root)",
       }
     )
-  }, [isDark, duration])
+  }, [theme, duration])
 
   return (
     <button
@@ -75,7 +97,7 @@ export const AnimatedThemeToggler = ({
       className={cn(className)}
       {...props}
     >
-      {isDark ? <Sun /> : <Moon />}
+      <ThemeIcon theme={theme} />
       <span className="sr-only">Toggle theme</span>
     </button>
   )

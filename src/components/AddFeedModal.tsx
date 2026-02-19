@@ -2,11 +2,14 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { FeedSource } from '../types';
 import { searchFeeds, isSearchableSource, searchLabels, type FeedSearchResult } from '../services/feedSearchService';
+import { usePro } from '../contexts/ProContext';
+import { PRO_LIMITS } from '../services/licenseService';
 
 interface AddFeedModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (feed: NewFeedData) => void;
+  feedCount?: number;
 }
 
 export interface NewFeedData {
@@ -68,7 +71,8 @@ function resolveInput(raw: string, currentSource: FeedSource): { url: string; na
   return { url: trimmed, name: '', source: currentSource, shorthand: null };
 }
 
-export function AddFeedModal({ isOpen, onClose, onAdd }: AddFeedModalProps) {
+export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedModalProps) {
+  const { isPro, showUpgradeModal } = usePro();
   const [name, setName] = useState('');
   const [input, setInput] = useState('');
   const [source, setSource] = useState<FeedSource>('article');
@@ -168,6 +172,13 @@ export function AddFeedModal({ isOpen, onClose, onAdd }: AddFeedModalProps) {
         setError("URL invalide. Essayez r/nom pour Reddit ou @nom pour YouTube");
         return;
       }
+    }
+
+    // Pro gate: check feed limit
+    if (!isPro && feedCount >= PRO_LIMITS.maxFeeds) {
+      onClose();
+      showUpgradeModal();
+      return;
     }
 
     setIsLoading(true);

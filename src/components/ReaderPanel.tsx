@@ -6,6 +6,8 @@ import { fetchViaBackend, openExternal } from '../lib/tauriFetch';
 import { summarizeArticle } from '../services/llmService';
 import { extractArticle, isContentTruncated } from '../services/articleExtractor';
 import { applyHighlights } from '../lib/highlightHtml';
+import * as ttsService from '../services/ttsService';
+import { usePro } from '../contexts/ProContext';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -167,6 +169,7 @@ function parseRedditPayload(payload: unknown, maxComments = 30): { comments: Fee
 const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'orange'];
 
 export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onClose }: ReaderPanelProps) {
+  const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useState<ViewMode>('reader');
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>('idle');
   const [summaryState, setSummaryState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -287,37 +290,43 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
 
   // Cancel TTS when article changes or component unmounts
   useEffect(() => {
-    speechSynthesis.cancel();
+    ttsService.stop();
     setTtsStatus('idle');
   }, [item?.id]);
 
   useEffect(() => {
-    return () => { speechSynthesis.cancel(); };
+    return () => { ttsService.stop(); };
   }, []);
 
   const handleTts = useCallback(() => {
+    const config = ttsService.getTtsConfig();
+
     if (ttsStatus === 'idle') {
       if (!item) return;
       const bodyHtml = fullContentHtml || item.fullContent || item.content;
       const bodyText = new DOMParser().parseFromString(bodyHtml, 'text/html').body.innerText;
       const text = `${item.title}. ${bodyText}`;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'fr-FR';
-      utterance.onend = () => setTtsStatus('idle');
-      utterance.onerror = () => setTtsStatus('idle');
-      speechSynthesis.speak(utterance);
       setTtsStatus('playing');
+      ttsService.speak(text, () => setTtsStatus('idle')).catch(() => setTtsStatus('idle'));
     } else if (ttsStatus === 'playing') {
-      speechSynthesis.pause();
-      setTtsStatus('paused');
+      if (config.engine === 'browser') {
+        ttsService.pauseBrowser();
+        setTtsStatus('paused');
+      } else {
+        // Native and ElevenLabs don't support pause — stop instead
+        ttsService.stop();
+        setTtsStatus('idle');
+      }
     } else {
-      speechSynthesis.resume();
-      setTtsStatus('playing');
+      if (config.engine === 'browser') {
+        ttsService.resumeBrowser();
+        setTtsStatus('playing');
+      }
     }
   }, [ttsStatus, item, fullContentHtml]);
 
   const handleTtsStop = useCallback(() => {
-    speechSynthesis.cancel();
+    ttsService.stop();
     setTtsStatus('idle');
   }, []);
 
@@ -760,14 +769,14 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               <button className="reader-tool-btn" title="Copier le lien">⎘</button>
               <button
                 className={`reader-tool-btn summarize ${summaryState === 'loading' ? 'loading' : ''}`}
-                title="Résumer avec l'IA"
-                onClick={handleSummarize}
+                title={isPro ? "Résumer avec l'IA" : "Résumer (Pro)"}
+                onClick={isPro ? handleSummarize : showUpgradeModal}
                 disabled={summaryState === 'loading'}
               >
                 {summaryState === 'loading' ? (
                   <span className="btn-spinner" />
-                ) : '✦'}
-                <span className="summarize-label">Résumer</span>
+                ) : isPro ? '✦' : '🔒'}
+                <span className="summarize-label">{isPro ? 'Résumer' : 'Résumer (Pro)'}</span>
               </button>
               <button
                 className={`reader-tool-btn tts ${ttsStatus !== 'idle' ? 'active' : ''}`}
@@ -1195,6 +1204,8 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               title={item.title}
               sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
               referrerPolicy="no-referrer"
+              onLoad={handleIframeLoad}
+              onError={handleIframeError}
             />
           )}
         </div>

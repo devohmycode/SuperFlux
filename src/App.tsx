@@ -12,6 +12,7 @@ import { SyncService } from './services/syncService';
 import { getProviderConfig, ProviderSyncService } from './services/providerSync';
 import type { NewFeedData } from './components/AddFeedModal';
 import type { FeedItem, FeedSource } from './types';
+import { UpgradeModal } from './components/UpgradeModal';
 
 const sourceLabels: Record<FeedSource, string> = {
   article: 'Articles',
@@ -375,6 +376,7 @@ export default function App() {
           )}
         </div>
       )}
+      <UpgradeModal />
     </div>
   );
 }

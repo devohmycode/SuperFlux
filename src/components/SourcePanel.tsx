@@ -6,6 +6,8 @@ import { AddFeedModal, type NewFeedData } from "./AddFeedModal";
 import { SettingsModal } from "./SettingsModal";
 import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
 import { UserMenu } from "./UserMenu";
+import { usePro } from "../contexts/ProContext";
+import { PRO_LIMITS } from "../services/licenseService";
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -111,6 +113,11 @@ export function SourcePanel({
   onMoveFeedToFolder,
   onClose,
 }: SourcePanelProps) {
+  const { isPro, showUpgradeModal } = usePro();
+
+  const totalFeeds = categories.reduce((sum, cat) => sum + cat.feeds.length, 0);
+  const totalFolders = categories.reduce((sum, cat) => sum + cat.folders.length, 0);
+
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(categories.map((c) => c.id)),
   );
@@ -529,9 +536,20 @@ export function SourcePanel({
         <button
           className="footer-btn footer-btn-add"
           title="Ajouter un flux"
-          onClick={() => setIsAddModalOpen(true)}
+          onClick={() => {
+            if (!isPro && totalFeeds >= PRO_LIMITS.maxFeeds) {
+              showUpgradeModal();
+            } else {
+              setIsAddModalOpen(true);
+            }
+          }}
         >
           <span>+</span>
+          {!isPro && totalFeeds >= PRO_LIMITS.maxFeeds - 5 && (
+            <span className="feed-unread" style={{ fontSize: '9px', marginLeft: 4 }}>
+              {totalFeeds}/{PRO_LIMITS.maxFeeds}
+            </span>
+          )}
         </button>
         <button className="footer-btn" title="Paramètres" onClick={() => setIsSettingsOpen(true)}>
           <span>⚙</span>
@@ -543,12 +561,14 @@ export function SourcePanel({
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddFeed}
+        feedCount={totalFeeds}
       />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onImportOpml={onImportOpml}
+        feedCount={totalFeeds}
       />
 
       {/* ── Context menus ── */}
@@ -563,12 +583,17 @@ export function SourcePanel({
             className="feed-context-menu-item"
             onClick={(e) => {
               e.stopPropagation();
+              if (!isPro && totalFolders >= PRO_LIMITS.maxFolders) {
+                showUpgradeModal();
+                setContextMenu(null);
+                return;
+              }
               setNewFolderInput({ categoryId: contextMenu.categoryId, value: '', parentPath: undefined });
               setContextMenu(null);
             }}
           >
             <span className="feed-context-menu-icon">📁</span>
-            Créer un sous-dossier
+            Créer un sous-dossier{!isPro ? ' (Pro)' : ''}
           </button>
         </div>
       )}
@@ -583,6 +608,11 @@ export function SourcePanel({
             className="feed-context-menu-item"
             onClick={(e) => {
               e.stopPropagation();
+              if (!isPro && totalFolders >= PRO_LIMITS.maxFolders) {
+                showUpgradeModal();
+                setContextMenu(null);
+                return;
+              }
               // Create subfolder inside this folder
               const folderPath = contextMenu.folderPath;
               const folderKey = `${contextMenu.categoryId}::${folderPath}`;
@@ -593,7 +623,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">📁</span>
-            Créer un sous-dossier
+            Créer un sous-dossier{!isPro ? ' (Pro)' : ''}
           </button>
           <button
             className="feed-context-menu-item"

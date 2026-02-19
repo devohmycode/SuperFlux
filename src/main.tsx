@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import './index.css'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
+import { ProProvider } from './contexts/ProContext'
 
 // Restore window effect settings on startup
 ;(function restoreWindowEffect() {
@@ -12,10 +13,14 @@ import { AuthProvider } from './contexts/AuthContext'
 
   if (effect !== 'none') {
     const isDark = document.documentElement.classList.contains('dark');
-    const base = isDark ? 20 : 240;
+    const isSepia = document.documentElement.classList.contains('sepia');
+    let r: number, g: number, b: number;
+    if (isDark) { r = 20; g = 20; b = 20; }
+    else if (isSepia) { r = 210; g = 195; b = 170; }
+    else { r = 240; g = 240; b = 240; }
     const alpha = Math.round((opacity / 100) * 200);
 
-    invoke('set_window_effect', { effect, r: base, g: base, b: base, a: alpha }).catch((e) => {
+    invoke('set_window_effect', { effect, r, g, b, a: alpha }).catch((e) => {
       console.warn('[startup] set_window_effect failed:', e);
     });
     document.documentElement.classList.add('window-effect-active');
@@ -26,7 +31,9 @@ import { AuthProvider } from './contexts/AuthContext'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <ProProvider>
+        <App />
+      </ProProvider>
     </AuthProvider>
   </StrictMode>,
 )

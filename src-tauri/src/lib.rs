@@ -1,3 +1,4 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, USER_AGENT};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -395,6 +396,109 @@ fn set_window_effect(
     Ok(())
 }
 
+// ── TTS (native) ──────────────────────────────────────────────────────
+
+#[cfg(not(target_os = "android"))]
+static TTS_INSTANCE: OnceLock<Mutex<Option<tts::Tts>>> = OnceLock::new();
+
+#[cfg(not(target_os = "android"))]
+fn get_tts_lock() -> &'static Mutex<Option<tts::Tts>> {
+    TTS_INSTANCE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn tts_speak(text: String, rate: Option<f32>) -> Result<(), String> {
+    let mut guard = get_tts_lock().lock().map_err(|e| format!("TTS lock: {e}"))?;
+    let tts = match guard.as_mut() {
+        Some(t) => t,
+        None => {
+            let instance = tts::Tts::default().map_err(|e| format!("TTS init: {e}"))?;
+            *guard = Some(instance);
+            guard.as_mut().unwrap()
+        }
+    };
+    if let Some(r) = rate {
+        let min = tts.min_rate();
+        let max = tts.max_rate();
+        let normal = tts.normal_rate();
+        let clamped = r.clamp(0.5, 2.0);
+        let mapped = if clamped <= 1.0 {
+            let t = (clamped - 0.5) / 0.5;
+            min + t * (normal - min)
+        } else {
+            let t = (clamped - 1.0) / 1.0;
+            normal + t * (max - normal)
+        };
+        tts.set_rate(mapped).map_err(|e| format!("TTS rate: {e}"))?;
+    }
+    tts.speak(text, true).map_err(|e| format!("TTS speak: {e}"))?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn tts_stop() -> Result<(), String> {
+    let mut guard = get_tts_lock().lock().map_err(|e| format!("TTS lock: {e}"))?;
+    if let Some(tts) = guard.as_mut() {
+        tts.stop().map_err(|e| format!("TTS stop: {e}"))?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn tts_speak(_text: String, _rate: Option<f32>) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn tts_stop() -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+async fn tts_speak_elevenlabs(
+    text: String,
+    api_key: String,
+    voice_id: String,
+    model_id: Option<String>,
+) -> Result<String, String> {
+    let client = get_or_init_client()?;
+    let url = format!(
+        "https://api.elevenlabs.io/v1/text-to-speech/{}?output_format=mp3_44100_128",
+        voice_id
+    );
+    let model = model_id.unwrap_or_else(|| "eleven_multilingual_v2".to_string());
+    let body = serde_json::json!({
+        "text": text,
+        "model_id": model,
+    });
+
+    let response = client
+        .post(&url)
+        .header("xi-api-key", &api_key)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("ElevenLabs request failed: {e}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body = response.text().await.unwrap_or_default();
+        return Err(format!("ElevenLabs HTTP {status}: {err_body}"));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("ElevenLabs read body: {e}"))?;
+
+    Ok(STANDARD.encode(&bytes))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -402,7 +506,7 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window, check_network, set_window_effect])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs])
         .setup(|_app| {
             #[cfg(not(target_os = "android"))]
             {
