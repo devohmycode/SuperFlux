@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Feed, FeedCategory, FeedSource } from "../types";
+import type { Feed, FeedCategory, FeedItem, FeedSource } from "../types";
 import { SyncButton } from "./SyncButton";
 import { AddFeedModal, type NewFeedData } from "./AddFeedModal";
 import { SettingsModal } from "./SettingsModal";
+import { StatsModal } from "./StatsModal";
 import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
 import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
@@ -17,6 +18,7 @@ interface SourcePanelProps {
   favoritesCount: number;
   showReadLater: boolean;
   readLaterCount: number;
+  allItems: FeedItem[];
   onSelectFeed: (feedId: string, source: FeedSource) => void;
   onSelectSource: (source: FeedSource) => void;
   onSelectAll: () => void;
@@ -95,6 +97,7 @@ export function SourcePanel({
   favoritesCount,
   showReadLater,
   readLaterCount,
+  allItems,
   onSelectFeed,
   onSelectSource,
   onSelectAll,
@@ -124,6 +127,7 @@ export function SourcePanel({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [moveSubmenuFeedId, setMoveSubmenuFeedId] = useState<string | null>(null);
 
@@ -551,6 +555,13 @@ export function SourcePanel({
             </span>
           )}
         </button>
+        <button className="footer-btn" title="Statistiques" onClick={() => setIsStatsOpen(true)}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <line x1="3" y1="12" x2="3" y2="7" />
+            <line x1="8" y1="12" x2="8" y2="4" />
+            <line x1="13" y1="12" x2="13" y2="9" />
+          </svg>
+        </button>
         <button className="footer-btn" title="Paramètres" onClick={() => setIsSettingsOpen(true)}>
           <span>⚙</span>
         </button>
@@ -569,6 +580,12 @@ export function SourcePanel({
         onClose={() => setIsSettingsOpen(false)}
         onImportOpml={onImportOpml}
         feedCount={totalFeeds}
+      />
+
+      <StatsModal
+        isOpen={isStatsOpen}
+        onClose={() => setIsStatsOpen(false)}
+        items={allItems}
       />
 
       {/* ── Context menus ── */}

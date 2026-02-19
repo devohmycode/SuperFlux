@@ -1,113 +1,165 @@
 # SuperFlux
 
-Lecteur RSS moderne et natif, construit avec **Tauri v2**, **React 19** et **TypeScript**. Interface trois panneaux inspiree des lecteurs de flux classiques, avec effets de fenetre natifs, resumes IA et synchronisation multi-providers.
+A fast, native desktop RSS reader with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, and a collapsible bar mode. Built with Tauri 2 and React 19.
 
-## Fonctionnalites
+## Features
 
-### Lecture
-- **Layout trois panneaux** -- Sources, liste des articles, lecteur -- avec panneaux redimensionnables (poignees + raccourcis `1` `2` `3`)
-- **Multi-sources** -- Articles (RSS/Atom), Reddit, YouTube, Podcasts, Mastodon, Twitter/X
-- **Modes de lecture** -- Contenu parse, extraction complete (Readability), vue web integree (proxy backend pour contourner X-Frame-Options)
-- **Lecteur audio** -- Lecture inline des enclosures podcast
-- **Surlignage de texte** -- Selection, 5 couleurs, annotations
-- **Favoris & Lire plus tard** -- Etoiles et signets pour acces rapide
-- **Import OPML** -- Migration depuis d'autres lecteurs
+### 3 Resizable Panels
 
-### IA
-- **Resumes d'articles** -- Via Groq (Llama) ou endpoint LLM configurable
-- **Format** au choix : puces ou paragraphe
+The interface is split into three independently resizable columns with drag handles between them:
 
-### Sync & Providers
-- **Sync cloud Supabase** -- Flux, statut de lecture, etoiles et signets synchronises entre appareils
-- **Sync provider RSS** -- Connexion a Miniflux, FreshRSS (Google Reader API) ou Feedbin pour sync bidirectionnelle
-- **Recherche de flux** -- Decouverte par URL ou mot-cle
+| Panel | Default Width | Content |
+|-------|--------------|---------|
+| **Sources** (left) | 18% | Feed tree organized by type, folders with drag-and-drop, unread counts, favorites, read later |
+| **Feed** (center) | 32% | Article list with pagination, time grouping, 3 view modes (normal, compact, cards) |
+| **Reader** (right) | 50% | Full article reader, AI summary, TTS, highlights, web view toggle, Reddit comments |
 
-### Apparence
-- **Theme sombre / clair** avec toggle anime
-- **Effets de fenetre** (Windows) -- Mica, Acrylic, Blur, Tabbed avec opacite ajustable (1-100%)
-- **Barre de titre custom** avec mode collapse (bandeau 52px)
-- **Fenetre transparente** avec persistance du backdrop DWM au deplacement/redimensionnement
+Each panel can be **closed individually** -- it collapses into a thin clickable strip. Toggle panels with keyboard shortcuts `1`, `2`, `3`. Panels resize freely by dragging the handles between them.
 
-## Stack technique
+### Collapsible Bar Mode
 
-| Couche | Technologie |
-|--------|-------------|
-| Shell | [Tauri v2](https://v2.tauri.app) (Rust) |
-| Frontend | React 19, TypeScript, Vite 7 |
-| Styling | Tailwind CSS v4, CSS custom avec `color-mix()` |
-| UI | Radix UI, Lucide icons, Framer Motion |
-| HTTP | reqwest (rustls) via commandes Tauri |
-| Auth & Sync | Supabase |
-| IA | Groq API / endpoints LLM custom |
+Click the collapse button in the title bar and the entire app shrinks into a **slim floating bar** that stays on your desktop. The bar displays:
 
-## Structure du projet
+- **Unread count**, favorites and read-later badges
+- **Live weather** with auto-detected geolocation (temperature + weather icon)
+- **Live clock** with date
+- **Pin button** to keep the bar always on top of other windows
 
-```
-src/
-  App.tsx                    # Layout principal 3 panneaux
-  main.tsx                   # Point d'entree, restauration des effets fenetre
-  types.ts                   # Types Feed, FeedItem, FeedCategory
-  index.css                  # Theme complet + CSS effets de fenetre
-  components/
-    SourcePanel.tsx           # Panneau 1 -- arbre de flux, dossiers, sources
-    FeedPanel.tsx             # Panneau 2 -- liste d'articles
-    ReaderPanel.tsx           # Panneau 3 -- lecteur, vue web, audio
-    TitleBar.tsx              # Barre de titre custom avec collapse
-    SettingsModal.tsx         # Parametres (compte, provider, IA, apparence)
-    AddFeedModal.tsx          # Dialogue d'ajout de flux
-    AudioPlayer.tsx           # Lecteur podcast
-    AuthModal.tsx             # Modal connexion/inscription
-    UserMenu.tsx              # Menu utilisateur
-    ResizeHandle.tsx          # Separateur de panneaux
-    SyncButton.tsx            # Indicateur de sync
-  services/
-    rssService.ts             # Parsing RSS/Atom/Reddit/YouTube
-    articleExtractor.ts       # Extraction de contenu complet (Readability)
-    llmService.ts             # Abstraction resumes LLM
-    groqService.ts            # Integration API Groq
-    syncService.ts            # Logique sync Supabase
-    providerSync.ts           # Orchestration sync provider
-    feedSearchService.ts      # Decouverte de flux
-    providers/
-      miniflux.ts             # Client API Miniflux
-      googleReader.ts         # Google Reader API (FreshRSS)
-      feedbin.ts              # Client API Feedbin
-  hooks/
-    useFeedStore.ts           # Gestion d'etat flux & articles
-    useHighlightStore.ts      # Persistance des surlignages
-    useResizablePanels.ts     # Logique de redimensionnement
-  contexts/
-    AuthContext.tsx            # Contexte auth Supabase
+One click expands back to the full 3-panel layout.
 
-src-tauri/
-  src/lib.rs                  # Commandes Tauri (fetch, HTTP, effets fenetre, collapse)
-  tauri.conf.json             # Config fenetre (transparent, decorations: false)
-  capabilities/default.json   # Permissions
-```
+### Reddit Feeds with Live Comments
 
-## Demarrage
+Add any subreddit by typing `r/subredditname` in the add feed dialog. SuperFlux:
 
-### Prerequis
+- Shows **comment count** on each post in the feed list
+- Fetches **live comments** from Reddit's API when reading a post (sorted by best, up to 30 comments)
+- Displays author, score, and relative timestamp for each comment inline
+- Falls back to cached comment data if the API is unavailable
 
-- [Node.js](https://nodejs.org) >= 18
-- [Rust](https://rustup.rs) >= 1.77
-- [Prerequis Tauri v2](https://v2.tauri.app/start/prerequisites/) pour votre plateforme
+### 6 Source Types
+
+| Source | Icon | Auto-detection |
+|--------|------|----------------|
+| Articles / Blogs | `◇` | Any RSS/Atom feed |
+| Reddit | `⬡` | `r/name` shorthand or reddit.com URLs |
+| YouTube | `▷` | Channel URLs, `@username` handles |
+| Twitter / X | `✦` | `@username`, x.com, nitter instances |
+| Mastodon | `🐘` | Mastodon / Fosstodon / Hachyderm instances |
+| Podcasts | `🎙` | Auto-detected from `audio/*` enclosures |
+
+### AI Summaries (Pro)
+
+Summarize articles or entire feed digests with one click. Two LLM providers:
+
+- **Ollama** (local) -- runs offline with `llama3.2:3b`, models can be pulled directly from Settings
+- **Groq** (cloud) -- uses `llama-3.3-70b-versatile` for higher quality
+
+Summary format is configurable: bullet points or paragraph.
+
+### Text-to-Speech
+
+Listen to articles with 3 TTS engine options:
+
+- **Browser** -- Web Speech API, supports pause/resume, adjustable speed (0.5x-2x)
+- **Native** -- OS-level TTS via Tauri, adjustable speed
+- **ElevenLabs** -- cloud API with configurable voice and model
+
+### Text Highlighting & Notes (Pro)
+
+Select text in any article to highlight it with 5 colors (yellow, green, blue, pink, orange). Add notes to highlights. The highlights menu lists all highlights for the current article with click-to-scroll navigation.
+
+### Podcast Player
+
+Built-in audio player for podcast feeds with:
+
+- Play/pause, skip -15s/+15s
+- Speed toggle (0.5x, 1x, 1.25x, 1.5x, 2x)
+- Seekable progress bar, volume slider
+- Album artwork display
+
+### Full Article Extraction
+
+When RSS content is truncated, SuperFlux automatically fetches the full article from the original site using [Readability](https://github.com/mozilla/readability). A manual "Fetch from original site" button is also available.
+
+### OPML Import
+
+Drag-and-drop or browse to upload `.opml` / `.xml` files exported from any RSS reader. Auto-detects source type from URL patterns.
+
+### RSS Provider Sync
+
+Connect an external RSS service to import subscriptions and sync read status bidirectionally:
+
+- **Miniflux** -- API key authentication
+- **FreshRSS** -- Google Reader API
+- **Feedbin** -- email/password
+- **BazQux** -- Google Reader API compatible
+
+### Cloud Sync
+
+Sign in with a Supabase account to sync feeds, read/star/bookmark status across devices. Bidirectional sync with last-write-wins strategy, runs every 5 minutes.
+
+### Appearance
+
+- **3 themes**: Light, Sepia, Dark with animated circular transition effect
+- **Window effects** (Windows): Mica, Acrylic, Blur, Tabbed with adjustable opacity
+- **Custom frameless title bar** with minimize, maximize, collapse controls
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `1` | Toggle Sources panel |
+| `2` | Toggle Feed panel |
+| `3` | Toggle Reader panel |
+| `↑` `↓` | Navigate articles |
+| `Enter` | Open selected article |
+| `S` | Toggle star/favorite |
+
+## Pro Plan
+
+SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks:
+
+- Unlimited AI summaries (article + feed digest)
+- Text highlighting and notes
+- 50+ feeds (vs limited in free)
+- 10+ folders for organization
+- Early access to new features
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Runtime | [Tauri v2](https://v2.tauri.app) (Rust) |
+| Frontend | [React 19](https://react.dev/), TypeScript, [Vite 7](https://vite.dev/) |
+| Styling | [Tailwind CSS v4](https://tailwindcss.com/), CSS `color-mix()` |
+| UI | [Radix UI](https://www.radix-ui.com/), Lucide icons, [Framer Motion](https://www.framer.com/motion/) |
+| HTTP | reqwest (rustls) via Tauri commands |
+| Auth & Sync | [Supabase](https://supabase.com/) |
+| Payments | [LemonSqueezy](https://www.lemonsqueezy.com/) |
+| AI | [Groq](https://groq.com/) / [Ollama](https://ollama.com/) |
+| TTS | Web Speech API / Native OS / [ElevenLabs](https://elevenlabs.io/) |
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) >= 18
+- [Rust](https://rustup.rs/) >= 1.77
+- [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform
 
 ### Installation
 
 ```bash
-git clone https://github.com/user/superflux.git
-cd superflux
 npm install
 ```
 
-### Developpement
+### Development
 
 ```bash
 npm run dev
 ```
 
-Lance `tauri dev` qui demarre Vite (port 5173) et le backend Rust simultanement.
+Starts Tauri dev mode which launches both Vite (port 5173) and the Rust backend.
 
 ### Build
 
@@ -115,27 +167,70 @@ Lance `tauri dev` qui demarre Vite (port 5173) et le backend Rust simultanement.
 npm run build
 ```
 
-Produit les installeurs specifiques a la plateforme dans `src-tauri/target/release/bundle/`.
+Produces platform-specific installers in `src-tauri/target/release/bundle/`.
 
-## Raccourcis clavier
+## Project Structure
 
-| Touche | Action |
-|--------|--------|
-| `1` | Afficher/masquer le panneau Sources |
-| `2` | Afficher/masquer le panneau Feed |
-| `3` | Afficher/masquer le panneau Lecteur |
+```
+src/
+  App.tsx                    # Root layout with 3-panel orchestration
+  main.tsx                   # Entry point, window effect restoration
+  types.ts                   # Feed, FeedItem, FeedCategory, TextHighlight types
+  index.css                  # Full theme + window effect CSS
+  components/
+    SourcePanel.tsx           # Panel 1 -- feed tree, folders, sources
+    FeedPanel.tsx             # Panel 2 -- article list, view modes, pagination
+    ReaderPanel.tsx           # Panel 3 -- reader, web view, comments, TTS
+    TitleBar.tsx              # Custom title bar with bar/collapse mode
+    AudioPlayer.tsx           # Embedded podcast player
+    SettingsModal.tsx         # Settings (account, provider, AI, TTS, appearance)
+    UpgradeModal.tsx          # Pro upgrade and license activation
+    AddFeedModal.tsx          # Add feed dialog with search
+    AuthModal.tsx             # Sign in / sign up modal
+    UserMenu.tsx              # User account menu
+    ResizeHandle.tsx          # Drag handle between panels
+    SyncButton.tsx            # Sync indicator
+  services/
+    rssService.ts             # RSS/Atom/Reddit/YouTube/Twitter fetching & parsing
+    articleExtractor.ts       # Full-text extraction via Readability
+    llmService.ts             # AI summary abstraction (Ollama / Groq)
+    ttsService.ts             # TTS engine abstraction
+    licenseService.ts         # Pro license activation via LemonSqueezy
+    syncService.ts            # Supabase cloud sync logic
+    feedSearchService.ts      # Feed discovery (Feedly, iTunes, Reddit)
+    providerSync.ts           # External provider sync orchestration
+    providers/
+      miniflux.ts             # Miniflux API client
+      googleReader.ts         # Google Reader API (FreshRSS, BazQux)
+      feedbin.ts              # Feedbin API client
+  hooks/
+    useFeedStore.ts           # Feed & article state management
+    useHighlightStore.ts      # Highlight persistence
+    useResizablePanels.ts     # Panel resize logic
+  contexts/
+    AuthContext.tsx            # Supabase auth context
+    ProContext.tsx             # Pro status management & caching
+
+src-tauri/
+  src/lib.rs                  # Tauri commands (fetch, HTTP, window effects, TTS, collapse)
+  tauri.conf.json             # Window config (transparent, frameless)
+  capabilities/default.json   # Permissions
+```
 
 ## Configuration
 
-Tous les parametres sont accessibles depuis l'icone engrenage dans la barre de titre :
+All settings are accessible from the gear icon in the source panel footer:
 
-- **Compte** -- Connexion Supabase pour sync cloud
-- **Provider RSS** -- Connexion Miniflux / FreshRSS / Feedbin
-- **IA / Resumes** -- Cle API Groq, modele LLM, format de resume
-- **Apparence** -- Type d'effet de fenetre et opacite
+- **Account** -- Supabase sign-in for cloud sync
+- **Superflux Pro** -- License activation or purchase
+- **Appearance** -- Window effect type and opacity
+- **RSS Provider** -- Miniflux / FreshRSS / Feedbin / BazQux connection
+- **AI / Summaries** -- LLM provider, model selection, summary format
+- **Text-to-Speech** -- Engine selection, speed, ElevenLabs API config
+- **OPML Import** -- Drag-and-drop file upload
 
-Les parametres sont persistes dans `localStorage`.
+Settings are persisted in `localStorage`.
 
-## Licence
+## License
 
-MIT
+Proprietary. All rights reserved.

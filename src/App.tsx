@@ -289,6 +289,7 @@ export default function App() {
                   favoritesCount={favoritesCount}
                   showReadLater={showReadLater}
                   readLaterCount={readLaterCount}
+                  allItems={allItems}
                   onSelectFeed={handleSelectFeed}
                   onSelectSource={handleSelectSource}
                   onSelectAll={handleSelectAll}
