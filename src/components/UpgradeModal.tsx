@@ -11,16 +11,10 @@ export function UpgradeModal() {
   const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authPrompt, setAuthPrompt] = useState(false);
 
   const handleActivate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!key.trim()) return;
-
-    if (!user) {
-      setAuthPrompt(true);
-      return;
-    }
 
     setError(null);
     setLoading(true);
@@ -42,7 +36,6 @@ export function UpgradeModal() {
   const handleClose = () => {
     setKey('');
     setError(null);
-    setAuthPrompt(false);
     hideUpgradeModal();
   };
 
