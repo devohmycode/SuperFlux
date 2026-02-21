@@ -189,6 +189,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   const [ttsStatus, setTtsStatus] = useState<TtsStatus>('idle');
   const [translateState, setTranslateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [translatedHtml, setTranslatedHtml] = useState('');
+  const [translatedTitle, setTranslatedTitle] = useState('');
   const [translateError, setTranslateError] = useState('');
   const [showTranslation, setShowTranslation] = useState(false);
   const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
@@ -241,6 +242,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     // Reset translation
     setTranslateState('idle');
     setTranslatedHtml('');
+    setTranslatedTitle('');
     setTranslateError('');
     setShowTranslation(false);
     // Reset or restore full content
@@ -661,8 +663,12 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     try {
       const config = getTranslationConfig();
       const contentToTranslate = fullContentHtml || item.fullContent || item.content;
-      const result = await translateText(contentToTranslate, config.targetLanguage);
+      const [result, titleResult] = await Promise.all([
+        translateText(contentToTranslate, config.targetLanguage),
+        translateText(item.title, config.targetLanguage),
+      ]);
       setTranslatedHtml(result);
+      setTranslatedTitle(titleResult);
       setTranslateState('done');
     } catch (e) {
       setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
@@ -1000,7 +1006,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               <span className="reader-author">{item.author}</span>
             </div>
 
-            <h1 className="reader-title">{item.title}</h1>
+            <h1 className="reader-title">{showTranslation && translatedTitle ? translatedTitle : item.title}</h1>
 
             <div className="reader-info">
               <time className="reader-date">{formatDate(item.publishedAt)}</time>

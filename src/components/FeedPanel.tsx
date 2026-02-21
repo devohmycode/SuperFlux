@@ -4,6 +4,7 @@ import type { FeedCategory, FeedItem, FeedSource } from '../types';
 import MorphingPageDots from './ui/morphing-page-dots';
 import { usePro } from '../contexts/ProContext';
 import { summarizeDigest } from '../services/llmService';
+import { translateText, getTranslationConfig } from '../services/translationService';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -122,13 +123,18 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   const [digestError, setDigestError] = useState('');
   const [digestOpen, setDigestOpen] = useState(true);
 
+  // ── Translation ──
+  const [translateActive, setTranslateActive] = useState(false);
+  const [translateLoading, setTranslateLoading] = useState(false);
+  const [translatedItems, setTranslatedItems] = useState<Record<string, { title: string; excerpt: string }>>({});
+
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(0);
   const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
 
   // Reset to page 0 and digest when items source changes
   const itemsKey = `${selectedFeedId}-${selectedSource}-${showFavorites}-${showReadLater}`;
-  useEffect(() => { setCurrentPage(0); setDigestState('idle'); setDigestText(''); setDigestError(''); }, [itemsKey]);
+  useEffect(() => { setCurrentPage(0); setDigestState('idle'); setDigestText(''); setDigestError(''); setTranslateActive(false); setTranslatedItems({}); }, [itemsKey]);
 
   // Clamp page if items shrink
   useEffect(() => {
@@ -166,6 +172,36 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
       setDigestState('error');
     }
   }, [digestState, items]);
+
+  const handleTranslateList = useCallback(async () => {
+    if (translateLoading) return;
+    if (translateActive) { setTranslateActive(false); return; }
+
+    setTranslateActive(true);
+    setTranslateLoading(true);
+    try {
+      const config = getTranslationConfig();
+      const toTranslate = paginatedItems.filter(i => !translatedItems[i.id]);
+      const results = await Promise.all(
+        toTranslate.map(async (item) => {
+          const [title, excerpt] = await Promise.all([
+            translateText(item.title, config.targetLanguage),
+            item.excerpt ? translateText(item.excerpt, config.targetLanguage) : Promise.resolve(''),
+          ]);
+          return { id: item.id, title, excerpt };
+        })
+      );
+      setTranslatedItems(prev => {
+        const next = { ...prev };
+        for (const r of results) next[r.id] = { title: r.title, excerpt: r.excerpt };
+        return next;
+      });
+    } catch {
+      setTranslateActive(false);
+    } finally {
+      setTranslateLoading(false);
+    }
+  }, [translateLoading, translateActive, paginatedItems, translatedItems]);
 
   // Close on click outside or Escape
   useEffect(() => {
@@ -208,6 +244,14 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
             disabled={digestState === 'loading' || items.length === 0}
           >
             {digestState === 'loading' ? <span className="btn-spinner" /> : isPro ? '✦' : '🔒'}
+          </button>
+          <button
+            className={`feed-action-btn ${translateActive ? 'active' : ''}`}
+            title={translateActive ? 'Voir les originaux' : 'Traduire la liste'}
+            onClick={handleTranslateList}
+            disabled={translateLoading || items.length === 0}
+          >
+            {translateLoading ? <span className="btn-spinner" /> : '🌐'}
           </button>
           <button
             className="feed-action-btn"
@@ -318,9 +362,9 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                   <div className="feed-blob-card__body">
                     <div className="feed-blob-card__title-row">
                       {!item.isRead && <span className="feed-blob-card__unread" />}
-                      <h3 className="feed-blob-card__title">{item.title}</h3>
+                      <h3 className="feed-blob-card__title">{translateActive && translatedItems[item.id] ? translatedItems[item.id].title : item.title}</h3>
                     </div>
-                    <p className="feed-blob-card__excerpt">{item.excerpt}</p>
+                    <p className="feed-blob-card__excerpt">{translateActive && translatedItems[item.id] ? translatedItems[item.id].excerpt : item.excerpt}</p>
                   </div>
 
                   <div className="feed-blob-card__footer">
@@ -389,11 +433,11 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                   </div>
                   <div className="feed-card-title-row">
                     {!item.isRead && <span className="feed-card-unread-dot" />}
-                    <h3 className="feed-card-title">{item.title}</h3>
+                    <h3 className="feed-card-title">{translateActive && translatedItems[item.id] ? translatedItems[item.id].title : item.title}</h3>
                   </div>
                   {!compact && (
                     <>
-                      <p className="feed-card-excerpt">{item.excerpt}</p>
+                      <p className="feed-card-excerpt">{translateActive && translatedItems[item.id] ? translatedItems[item.id].excerpt : item.excerpt}</p>
                       <div className="feed-card-footer">
                         {item.tags?.slice(0, 2).map(tag => (
                           <span key={tag} className="feed-card-tag">{tag}</span>

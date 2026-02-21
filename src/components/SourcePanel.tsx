@@ -5,6 +5,7 @@ import { SyncButton } from "./SyncButton";
 import { AddFeedModal, type NewFeedData } from "./AddFeedModal";
 import { SettingsModal } from "./SettingsModal";
 import { StatsModal } from "./StatsModal";
+
 import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
 import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
