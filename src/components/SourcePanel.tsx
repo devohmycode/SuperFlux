@@ -565,6 +565,13 @@ export function SourcePanel({
         <button className="footer-btn" title="Paramètres" onClick={() => setIsSettingsOpen(true)}>
           <span>⚙</span>
         </button>
+        {!isPro && (
+          <button className="footer-btn upgrade-btn" title="Passer à Pro" onClick={showUpgradeModal}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="8,1 10.5,5.5 15,6.5 12,10 12.5,15 8,12.5 3.5,15 4,10 1,6.5 5.5,5.5" />
+            </svg>
+          </button>
+        )}
         <UserMenu />
       </div>
 

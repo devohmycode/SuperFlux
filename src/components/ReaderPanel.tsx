@@ -4,6 +4,7 @@ import type { FeedComment, FeedItem, SummaryFormat, TextHighlight, HighlightColo
 import { AudioPlayer } from './AudioPlayer';
 import { fetchViaBackend, openExternal } from '../lib/tauriFetch';
 import { summarizeArticle } from '../services/llmService';
+import { translateText, getTranslationConfig } from '../services/translationService';
 import { extractArticle, isContentTruncated } from '../services/articleExtractor';
 import { applyHighlights } from '../lib/highlightHtml';
 import * as ttsService from '../services/ttsService';
@@ -186,6 +187,10 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     error: null,
   });
   const [ttsStatus, setTtsStatus] = useState<TtsStatus>('idle');
+  const [translateState, setTranslateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [translatedHtml, setTranslatedHtml] = useState('');
+  const [translateError, setTranslateError] = useState('');
+  const [showTranslation, setShowTranslation] = useState(false);
   const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectedPrefix, setSelectedPrefix] = useState('');
@@ -233,6 +238,11 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     setSelectedText('');
     setHighlightsMenuOpen(false);
     setEditingNoteId(null);
+    // Reset translation
+    setTranslateState('idle');
+    setTranslatedHtml('');
+    setTranslateError('');
+    setShowTranslation(false);
     // Reset or restore full content
     if (item?.fullContent) {
       setFullContentStatus('done');
@@ -303,8 +313,9 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
 
     if (ttsStatus === 'idle') {
       if (!item) return;
-      const bodyHtml = fullContentHtml || item.fullContent || item.content;
-      const bodyText = new DOMParser().parseFromString(bodyHtml, 'text/html').body.innerText;
+      const bodyText = showTranslation && translateState === 'done' && translatedHtml
+        ? translatedHtml
+        : new DOMParser().parseFromString(fullContentHtml || item.fullContent || item.content, 'text/html').body.innerText;
       const text = `${item.title}. ${bodyText}`;
       setTtsStatus('playing');
       ttsService.speak(text, () => setTtsStatus('idle')).catch(() => setTtsStatus('idle'));
@@ -323,7 +334,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
         setTtsStatus('playing');
       }
     }
-  }, [ttsStatus, item, fullContentHtml]);
+  }, [ttsStatus, item, fullContentHtml, showTranslation, translateState, translatedHtml]);
 
   const handleTtsStop = useCallback(() => {
     ttsService.stop();
@@ -635,6 +646,31 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     }
   }, [item, summaryState, onSummaryGenerated]);
 
+  const handleTranslate = useCallback(async () => {
+    if (!item) return;
+    // Toggle: if already translated, just switch view
+    if (translateState === 'done') {
+      setShowTranslation(prev => !prev);
+      return;
+    }
+    if (translateState === 'loading') return;
+
+    setTranslateState('loading');
+    setTranslateError('');
+    setShowTranslation(true);
+    try {
+      const config = getTranslationConfig();
+      const contentToTranslate = fullContentHtml || item.fullContent || item.content;
+      const result = await translateText(contentToTranslate, config.targetLanguage);
+      setTranslatedHtml(result);
+      setTranslateState('done');
+    } catch (e) {
+      setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
+      setTranslateState('error');
+      setShowTranslation(false);
+    }
+  }, [item, translateState, fullContentHtml]);
+
   const breadcrumbBar = breadcrumb && !feedPanelOpen ? (
     <div className="reader-breadcrumb">
       <Breadcrumb>
@@ -790,6 +826,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                   ■
                 </button>
               )}
+              <button
+                className={`reader-tool-btn ${showTranslation ? 'active' : ''}`}
+                title={showTranslation ? 'Voir l\'original' : 'Traduire'}
+                onClick={handleTranslate}
+                disabled={translateState === 'loading'}
+              >
+                {translateState === 'loading' ? (
+                  <span className="btn-spinner" />
+                ) : '🌐'}
+              </button>
 
               {/* Highlights menu */}
               <div style={{ position: 'relative' }}>
@@ -1055,11 +1101,26 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               </div>
             )}
 
+            {showTranslation && translateState === 'loading' && (
+              <div className="reader-fullcontent-banner loading">
+                <span className="btn-spinner" />
+                <span>Traduction en cours...</span>
+              </div>
+            )}
+            {showTranslation && translateState === 'error' && (
+              <div className="reader-fullcontent-banner error">
+                <span>{translateError}</span>
+                <button className="reader-fullcontent-btn" onClick={handleTranslate}>
+                  Réessayer
+                </button>
+              </div>
+            )}
+
             <div
               className="reader-body"
               ref={readerBodyRef}
               onMouseUp={isPro ? handleTextSelection : undefined}
-              dangerouslySetInnerHTML={{ __html: processedHtml }}
+              dangerouslySetInnerHTML={{ __html: showTranslation && translateState === 'done' ? translatedHtml : processedHtml }}
             />
 
             {/* Manual fetch button when content seems ok but user wants full version */}

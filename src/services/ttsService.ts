@@ -15,17 +15,21 @@ const STORAGE_KEY = 'superflux_tts_config';
 const DEFAULT_CONFIG: TtsConfig = {
   engine: 'browser',
   rate: 1.0,
-  elevenLabsApiKey: '',
+  elevenLabsApiKey: import.meta.env.VITE_ELEVENLABS_API_KEY || '',
   elevenLabsVoiceId: '21m00Tcm4TlvDq8ikWAM',
   elevenLabsModelId: 'eleven_multilingual_v2',
 };
 
 export function getTtsConfig(): TtsConfig {
+  const envKey = import.meta.env.VITE_ELEVENLABS_API_KEY || '';
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      return { ...DEFAULT_CONFIG, ...saved, elevenLabsApiKey: envKey || saved.elevenLabsApiKey || '' };
+    }
   } catch { /* ignore */ }
-  return { ...DEFAULT_CONFIG };
+  return { ...DEFAULT_CONFIG, elevenLabsApiKey: envKey };
 }
 
 export function saveTtsConfig(config: TtsConfig): void {
@@ -48,12 +52,13 @@ export async function speak(text: string, onEnd?: StatusCallback): Promise<void>
     }
 
     case 'elevenlabs': {
-      if (!config.elevenLabsApiKey) {
-        throw new Error('Clé API ElevenLabs manquante');
+      const apiKey = config.elevenLabsApiKey || import.meta.env.VITE_ELEVENLABS_API_KEY || '';
+      if (!apiKey) {
+        throw new Error('Clé API ElevenLabs manquante (VITE_ELEVENLABS_API_KEY)');
       }
       const base64: string = await invoke('tts_speak_elevenlabs', {
         text,
-        apiKey: config.elevenLabsApiKey,
+        apiKey,
         voiceId: config.elevenLabsVoiceId,
         modelId: config.elevenLabsModelId,
       });

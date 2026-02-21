@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePro } from '../contexts/ProContext';
 import { useAuth } from '../contexts/AuthContext';
-import { LEMONSQUEEZY_CHECKOUT_URL } from '../services/licenseService';
+import { LEMONSQUEEZY_CHECKOUT_URL, LEMONSQUEEZY_SUBSCRIPTION_URL } from '../services/licenseService';
 import { openExternal } from '../lib/tauriFetch';
 
 export function UpgradeModal() {
@@ -88,22 +88,50 @@ export function UpgradeModal() {
 
                 <button
                   className="btn-primary"
-                  style={{ width: '100%', marginBottom: 16 }}
+                  style={{ width: '100%', marginBottom: 10, position: 'relative' }}
                   onClick={() => openExternal(LEMONSQUEEZY_CHECKOUT_URL)}
                 >
-                  Acheter une licence Pro — 4,99 €
+                  <span>Acheter une licence Pro — 4,99 €</span>
+                  <span style={{
+                    textDecoration: 'line-through',
+                    opacity: 0.6,
+                    marginLeft: 8,
+                    fontSize: '0.85em',
+                  }}>
+                    9,99 €
+                  </span>
+                  <span style={{
+                    background: '#ef4444',
+                    color: '#fff',
+                    fontSize: '0.7em',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    marginLeft: 8,
+                  }}>
+                    -50%
+                  </span>
+                </button>
+
+                <button
+                  className="btn-secondary"
+                  style={{ width: '100%', marginBottom: 16 }}
+                  onClick={() => openExternal(LEMONSQUEEZY_SUBSCRIPTION_URL)}
+                >
+                  Abonnement : 1 mois — 0,99 €
                 </button>
               </div>
 
               <div className="settings-section">
                 <h3 className="settings-section-title">Activer une licence</h3>
+                <p className="settings-section-desc" style={{ marginBottom: 12, color: '#ef4444' }}>
+                  Vous devez être connecté à un compte Superflux pour activer votre licence.
+                </p>
 
-                {authPrompt && !user ? (
-                  <div style={{ marginBottom: 12 }}>
-                    <p className="settings-section-desc">
-                      Connectez-vous à votre compte Superflux pour activer votre licence Pro.
-                    </p>
-                  </div>
+                {!user ? (
+                  <p className="settings-section-desc" style={{ opacity: 0.7, fontStyle: 'italic' }}>
+                    Connectez-vous depuis les paramètres pour continuer.
+                  </p>
                 ) : (
                   <form onSubmit={handleActivate}>
                     <input

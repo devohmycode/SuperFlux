@@ -8,6 +8,7 @@ export const PRO_LIMITS = {
 } as const;
 
 export const LEMONSQUEEZY_CHECKOUT_URL = 'https://ohmyapps.lemonsqueezy.com/checkout/buy/02f83483-8f23-408f-b960-fc550819ac44';
+export const LEMONSQUEEZY_SUBSCRIPTION_URL = 'https://ohmyapps.lemonsqueezy.com/checkout/buy/f8fe39be-3396-4184-aa0e-5b634e34b355';
 
 const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/activate-license`;
 
