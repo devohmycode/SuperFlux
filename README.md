@@ -1,6 +1,9 @@
+![Shot](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-01.png)
 # SuperFlux
 
 A fast, native desktop RSS reader with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, and a collapsible bar mode. Built with Tauri 2 and React 19.
+
+![Shot2](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-02.png)
 
 ## Features
 
@@ -17,7 +20,7 @@ The interface is split into three independently resizable columns with drag hand
 Each panel can be **closed individually** -- it collapses into a thin clickable strip. Toggle panels with keyboard shortcuts `1`, `2`, `3`. Panels resize freely by dragging the handles between them.
 
 ### Collapsible Bar Mode
-
+![Shot5](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-05.png)
 Click the collapse button in the title bar and the entire app shrinks into a **slim floating bar** that stays on your desktop. The bar displays:
 
 - **Unread count**, favorites and read-later badges
@@ -103,7 +106,7 @@ Sign in with a Supabase account to sync feeds, read/star/bookmark status across 
 - **3 themes**: Light, Sepia, Dark with animated circular transition effect
 - **Window effects** (Windows): Mica, Acrylic, Blur, Tabbed with adjustable opacity
 - **Custom frameless title bar** with minimize, maximize, collapse controls
-
+![Shot4](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-04.png)
 ### Keyboard Shortcuts
 
 | Key | Action |
