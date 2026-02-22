@@ -120,8 +120,38 @@ export default function App() {
 
   // Get items based on selection
   const items = useMemo(() => {
-    if (showFavorites) return store.getAllItems().filter(item => item.isStarred);
-    if (showReadLater) return store.getAllItems().filter(item => item.isBookmarked);
+    if (showFavorites) {
+      const filtered = store.getAllItems().filter(item => item.isStarred);
+      const order = store.getFavoritesOrder();
+      if (order.length > 0) {
+        const posMap = new Map(order.map((id, i) => [id, i]));
+        return filtered.sort((a, b) => {
+          const posA = posMap.get(a.id);
+          const posB = posMap.get(b.id);
+          if (posA !== undefined && posB !== undefined) return posA - posB;
+          if (posA !== undefined) return -1;
+          if (posB !== undefined) return 1;
+          return b.publishedAt.getTime() - a.publishedAt.getTime();
+        });
+      }
+      return filtered;
+    }
+    if (showReadLater) {
+      const filtered = store.getAllItems().filter(item => item.isBookmarked);
+      const order = store.getReadLaterOrder();
+      if (order.length > 0) {
+        const posMap = new Map(order.map((id, i) => [id, i]));
+        return filtered.sort((a, b) => {
+          const posA = posMap.get(a.id);
+          const posB = posMap.get(b.id);
+          if (posA !== undefined && posB !== undefined) return posA - posB;
+          if (posA !== undefined) return -1;
+          if (posB !== undefined) return 1;
+          return b.publishedAt.getTime() - a.publishedAt.getTime();
+        });
+      }
+      return filtered;
+    }
     if (selectedFeedId) return store.getItemsByFeed(selectedFeedId);
     if (selectedSource) return store.getItemsBySource(selectedSource);
     return store.getAllItems();
@@ -249,6 +279,11 @@ export default function App() {
     setReaderPanelOpen(false);
   }, []);
 
+  const handleReorderItems = useCallback((orderedIds: string[]) => {
+    if (showFavorites) store.reorderFavorites(orderedIds);
+    else if (showReadLater) store.reorderReadLater(orderedIds);
+  }, [showFavorites, showReadLater, store]);
+
   // Keyboard shortcuts: 1/2/3 toggle panels
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -298,6 +333,7 @@ export default function App() {
                   onAddFeed={handleAddFeed}
                   onImportOpml={store.importFeeds}
                   onRemoveFeed={store.removeFeed}
+                  onRenameFeed={store.renameFeed}
                   onSync={handleSyncAll}
                   isSyncing={store.isSyncing}
                   syncProgress={store.syncProgress}
@@ -333,6 +369,7 @@ export default function App() {
                   onToggleRead={store.toggleRead}
                   onToggleStar={store.toggleStar}
                   onToggleBookmark={store.toggleBookmark}
+                  onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
                   onClose={handleCloseFeedPanel}
                 />
               </div>

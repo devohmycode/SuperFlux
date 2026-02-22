@@ -187,6 +187,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     error: null,
   });
   const [ttsStatus, setTtsStatus] = useState<TtsStatus>('idle');
+  const [ttsError, setTtsError] = useState<string | null>(null);
   const [translateState, setTranslateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [translatedHtml, setTranslatedHtml] = useState('');
   const [translatedTitle, setTranslatedTitle] = useState('');
@@ -304,6 +305,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   useEffect(() => {
     ttsService.stop();
     setTtsStatus('idle');
+    setTtsError(null);
   }, [item?.id]);
 
   useEffect(() => {
@@ -315,12 +317,22 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
 
     if (ttsStatus === 'idle') {
       if (!item) return;
-      const bodyText = showTranslation && translateState === 'done' && translatedHtml
-        ? translatedHtml
-        : new DOMParser().parseFromString(fullContentHtml || item.fullContent || item.content, 'text/html').body.innerText;
+      // Always strip HTML to get plain text
+      const bodyText = new DOMParser().parseFromString(
+        showTranslation && translateState === 'done' && translatedHtml
+          ? translatedHtml
+          : fullContentHtml || item.fullContent || item.content,
+        'text/html'
+      ).body.innerText;
       const text = `${item.title}. ${bodyText}`;
       setTtsStatus('playing');
-      ttsService.speak(text, () => setTtsStatus('idle')).catch(() => setTtsStatus('idle'));
+      setTtsError(null);
+      ttsService.speak(text, () => setTtsStatus('idle')).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[TTS] ElevenLabs error:', msg);
+        setTtsError(msg);
+        setTtsStatus('idle');
+      });
     } else if (ttsStatus === 'playing') {
       if (config.engine === 'browser') {
         ttsService.pauseBrowser();
@@ -341,6 +353,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   const handleTtsStop = useCallback(() => {
     ttsService.stop();
     setTtsStatus('idle');
+    setTtsError(null);
   }, []);
 
   // --- Highlight handlers ---
@@ -821,11 +834,11 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 <span className="summarize-label">{isPro ? 'Résumer' : 'Résumer (Pro)'}</span>
               </button>
               <button
-                className={`reader-tool-btn tts ${ttsStatus !== 'idle' ? 'active' : ''}`}
-                title={ttsStatus === 'playing' ? 'Pause' : ttsStatus === 'paused' ? 'Reprendre' : 'Écouter'}
+                className={`reader-tool-btn tts ${ttsStatus !== 'idle' ? 'active' : ''} ${ttsError ? 'error' : ''}`}
+                title={ttsError ? `Erreur: ${ttsError}` : ttsStatus === 'playing' ? 'Pause' : ttsStatus === 'paused' ? 'Reprendre' : 'Écouter'}
                 onClick={handleTts}
               >
-                {ttsStatus === 'playing' ? '⏸' : '▶'}
+                {ttsError ? '⚠' : ttsStatus === 'playing' ? '⏸' : '▶'}
               </button>
               {ttsStatus !== 'idle' && (
                 <button className="reader-tool-btn tts-stop" onClick={handleTtsStop} title="Arrêter">

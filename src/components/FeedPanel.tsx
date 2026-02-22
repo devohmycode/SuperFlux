@@ -41,6 +41,7 @@ interface FeedPanelProps {
   onToggleRead: (itemId: string) => void;
   onToggleStar: (itemId: string) => void;
   onToggleBookmark: (itemId: string) => void;
+  onReorderItems?: (orderedIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -110,12 +111,62 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
   return null;
 }
 
-export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onToggleRead, onToggleStar, onToggleBookmark, onClose }: FeedPanelProps) {
+export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onClose }: FeedPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FeedItem } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Drag-and-drop reorder (favorites / read later) ──
+  const canReorder = !!onReorderItems;
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, itemId: string) => {
+    setDragItemId(itemId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', itemId);
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.4';
+    }
+  }, []);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    setDragItemId(null);
+    setDropTargetId(null);
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '';
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetId(targetId);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTargetId(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId || !onReorderItems) return;
+
+    const ids = items.map(i => i.id);
+    const fromIdx = ids.indexOf(sourceId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, sourceId);
+    onReorderItems(ids);
+
+    setDragItemId(null);
+    setDropTargetId(null);
+  }, [items, onReorderItems]);
 
   // ── Digest IA ──
   const [digestState, setDigestState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
@@ -395,6 +446,64 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                 animation: blobFloat 8s linear infinite;
               }
             `}</style>
+          </div>
+        ) : canReorder ? (
+          /* ─── Reorderable Flat List (favorites / read later) ─── */
+          <div className="feed-group">
+            {paginatedItems.map((item, idx) => (
+              <motion.article
+                key={item.id}
+                className={`feed-card ${selectedItemId === item.id ? 'active' : ''} ${item.isRead ? 'read' : ''} ${dragItemId === item.id ? 'dragging' : ''} ${dropTargetId === item.id ? 'drop-over' : ''}`}
+                onClick={() => onSelectItem(item)}
+                onContextMenu={(e) => handleContextMenu(e, item)}
+                draggable
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragEnd={(e) => handleDragEnd(e)}
+                onDragOver={(e) => handleDragOver(e, item.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, item.id)}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.03, duration: 0.3 }}
+              >
+                <div className="feed-card-meta">
+                  <span className="feed-card-drag-handle" title="Glisser pour réordonner">⠿</span>
+                  <span className="feed-card-source">{item.feedName}</span>
+                  <span className="feed-card-dot">·</span>
+                  <span className="feed-card-time">{formatTimeAgo(item.publishedAt)}</span>
+                  {item.isStarred && <span className="feed-card-star">★</span>}
+                  <button
+                    className={`feed-card-bookmark ${item.isBookmarked ? 'active' : ''}`}
+                    title={item.isBookmarked ? 'Retirer de Lire plus tard' : 'Lire plus tard'}
+                    onClick={(e) => { e.stopPropagation(); onToggleBookmark(item.id); }}
+                  >
+                    {item.isBookmarked ? '🔖' : '🏷'}
+                  </button>
+                </div>
+                <div className="feed-card-title-row">
+                  {!item.isRead && <span className="feed-card-unread-dot" />}
+                  <h3 className="feed-card-title">{translateActive && translatedItems[item.id] ? translatedItems[item.id].title : item.title}</h3>
+                </div>
+                {!compact && (
+                  <>
+                    <p className="feed-card-excerpt">{translateActive && translatedItems[item.id] ? translatedItems[item.id].excerpt : item.excerpt}</p>
+                    <div className="feed-card-footer">
+                      {item.tags?.slice(0, 2).map(tag => (
+                        <span key={tag} className="feed-card-tag">{tag}</span>
+                      ))}
+                      {item.source === 'reddit' && typeof item.commentCount === 'number' && (
+                        <span className="feed-card-comments">{formatCommentCount(item.commentCount)}</span>
+                      )}
+                      {item.source === 'podcast' && item.duration ? (
+                        <span className="feed-card-readtime">{formatDuration(item.duration)}</span>
+                      ) : item.readTime ? (
+                        <span className="feed-card-readtime">{item.readTime} min</span>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </motion.article>
+            ))}
           </div>
         ) : (
           /* ─── List View (normal / compact) ─── */

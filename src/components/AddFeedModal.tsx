@@ -4,6 +4,7 @@ import type { FeedSource } from '../types';
 import { searchFeeds, isSearchableSource, searchLabels, type FeedSearchResult } from '../services/feedSearchService';
 import { usePro } from '../contexts/ProContext';
 import { PRO_LIMITS } from '../services/licenseService';
+import { detectRSSHubRoute, type RSSHubMatch } from '../services/rsshubService';
 
 interface AddFeedModalProps {
   isOpen: boolean;
@@ -87,6 +88,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
   const searchVersionRef = useRef(0);
 
   const resolved = useMemo(() => resolveInput(input, source), [input, source]);
+  const rsshubMatch = useMemo(() => detectRSSHubRoute(input.trim()), [input]);
 
   const triggerSearch = useCallback((query: string, currentSource: FeedSource) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -318,6 +320,24 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
                     <span className="resolved-icon">→</span>
                     <span className="resolved-url">{resolved.shorthand}</span>
                   </motion.div>
+                )}
+                {rsshubMatch && !resolved.shorthand && (
+                  <motion.button
+                    type="button"
+                    className="rsshub-suggestion"
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15 }}
+                    onClick={() => {
+                      setInput(rsshubMatch.rsshubUrl);
+                      if (!name.trim()) setName(rsshubMatch.label);
+                    }}
+                  >
+                    <svg className="rsshub-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                    </svg>
+                    <span className="rsshub-suggestion-text">Flux RSSHub disponible — {rsshubMatch.label}</span>
+                  </motion.button>
                 )}
               </div>
 
