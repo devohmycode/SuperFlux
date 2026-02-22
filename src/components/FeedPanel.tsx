@@ -123,16 +123,18 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   const [dragItemId, setDragItemId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
-  const handleDragStart = useCallback((e: React.DragEvent, itemId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent | MouseEvent | TouchEvent | PointerEvent, itemId: string) => {
     setDragItemId(itemId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', itemId);
+    if ('dataTransfer' in e && e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', itemId);
+    }
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '0.4';
     }
   }, []);
 
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
+  const handleDragEnd = useCallback((e: React.DragEvent | MouseEvent | TouchEvent | PointerEvent) => {
     setDragItemId(null);
     setDropTargetId(null);
     if (e.currentTarget instanceof HTMLElement) {
