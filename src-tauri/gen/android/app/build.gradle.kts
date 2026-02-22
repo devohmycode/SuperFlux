@@ -15,10 +15,10 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 36
-    namespace = "com.superflux.app"
+    namespace = "com.ohmycode.superflux"
     defaultConfig {
-        manifestPlaceholders["usesCleartextTraffic"] = "true"
-        applicationId = "com.superflux.app"
+        manifestPlaceholders["usesCleartextTraffic"] = "false"
+        applicationId = "com.ohmycode.superflux"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

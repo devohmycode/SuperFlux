@@ -1,4 +1,4 @@
-package com.superflux.app
+package com.ohmycode.superflux
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

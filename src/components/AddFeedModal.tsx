@@ -4,7 +4,7 @@ import type { FeedSource } from '../types';
 import { searchFeeds, isSearchableSource, searchLabels, type FeedSearchResult } from '../services/feedSearchService';
 import { usePro } from '../contexts/ProContext';
 import { PRO_LIMITS } from '../services/licenseService';
-import { detectRSSHubRoute, type RSSHubMatch } from '../services/rsshubService';
+import { detectRSSHubRoute } from '../services/rsshubService';
 
 interface AddFeedModalProps {
   isOpen: boolean;
