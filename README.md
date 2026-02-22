@@ -1,4 +1,7 @@
+
+
 ![Shot](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-01.png)
+[![Build & Release](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml)
 # SuperFlux
 
 A fast, native desktop RSS reader with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, and a collapsible bar mode. Built with Tauri 2 and React 19.
