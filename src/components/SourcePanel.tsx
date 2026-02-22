@@ -5,11 +5,13 @@ import { SyncButton } from "./SyncButton";
 import { AddFeedModal, type NewFeedData } from "./AddFeedModal";
 import { SettingsModal } from "./SettingsModal";
 import { StatsModal } from "./StatsModal";
+import { ExpandingPanel } from "./ExpandingPanel";
 
 import { AnimatedThemeToggler } from "./ui/animated-theme-toggler";
 import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
 import { PRO_LIMITS } from "../services/licenseService";
+import { isRSSHubUrl } from "../services/rsshubService";
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -28,6 +30,7 @@ interface SourcePanelProps {
   onAddFeed: (feed: NewFeedData) => void;
   onImportOpml: (feeds: { url: string; name: string; source: FeedSource }[]) => number;
   onRemoveFeed: (feedId: string) => void;
+  onRenameFeed: (feedId: string, newName: string) => void;
   onSync: () => void;
   isSyncing: boolean;
   syncProgress: number;
@@ -107,6 +110,7 @@ export function SourcePanel({
   onAddFeed,
   onImportOpml,
   onRemoveFeed,
+  onRenameFeed,
   onSync,
   isSyncing,
   syncProgress,
@@ -129,14 +133,17 @@ export function SourcePanel({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [moveSubmenuFeedId, setMoveSubmenuFeedId] = useState<string | null>(null);
 
   // Inline inputs (parentPath: where to create; oldPath: which folder to rename)
   const [newFolderInput, setNewFolderInput] = useState<{ categoryId: string; value: string; parentPath?: string } | null>(null);
   const [renameFolderInput, setRenameFolderInput] = useState<{ categoryId: string; oldPath: string; value: string } | null>(null);
+  const [renameFeedInput, setRenameFeedInput] = useState<{ feedId: string; value: string } | null>(null);
   const newFolderRef = useRef<HTMLInputElement>(null);
   const renameFolderRef = useRef<HTMLInputElement>(null);
+  const renameFeedRef = useRef<HTMLInputElement>(null);
 
   // Drag-and-drop state
   const [dragFeedId, setDragFeedId] = useState<string | null>(null);
@@ -149,6 +156,9 @@ export function SourcePanel({
   useEffect(() => {
     if (renameFolderInput) renameFolderRef.current?.focus();
   }, [renameFolderInput]);
+  useEffect(() => {
+    if (renameFeedInput) renameFeedRef.current?.focus();
+  }, [renameFeedInput]);
 
   const handleAddFeed = (feedData: NewFeedData) => {
     onAddFeed(feedData);
@@ -262,29 +272,67 @@ export function SourcePanel({
 
   // ── Render helpers ──
 
-  const renderFeed = (feed: Feed, feedIdx: number, categoryId: string, depth: number) => (
-    <motion.button
-      key={feed.id}
-      className={`feed-item-btn ${selectedFeedId === feed.id ? "active" : ""} ${dragFeedId === feed.id ? "dragging" : ""}`}
-      style={{ paddingLeft: FEED_BASE_INDENT + depth * INDENT_STEP }}
-      onClick={() => onSelectFeed(feed.id, feed.source)}
-      onContextMenu={(e) => handleFeedContextMenu(e, feed, categoryId)}
-      draggable
-      {...{ onDragStart: (e: React.DragEvent) => handleDragStart(e, feed.id) } as any}
-      {...{ onDragEnd: (e: React.DragEvent) => handleDragEnd(e) } as any}
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: feedIdx * 0.03, duration: 0.2 }}
-    >
-      <span className="feed-icon" style={{ color: feed.color }}>
-        {feed.icon}
-      </span>
-      <span className="feed-name">{feed.name}</span>
-      {feed.unreadCount > 0 && (
-        <span className="feed-unread">{feed.unreadCount}</span>
-      )}
-    </motion.button>
-  );
+  const renderFeed = (feed: Feed, feedIdx: number, categoryId: string, depth: number) => {
+    if (renameFeedInput?.feedId === feed.id) {
+      return (
+        <div key={feed.id} className="folder-inline-input-wrapper" style={{ paddingLeft: FEED_BASE_INDENT + depth * INDENT_STEP }}>
+          <span className="feed-icon" style={{ color: feed.color, marginRight: 6 }}>{feed.icon}</span>
+          <input
+            ref={renameFeedRef}
+            className="folder-inline-input"
+            type="text"
+            value={renameFeedInput.value}
+            onChange={(e) => setRenameFeedInput({ ...renameFeedInput, value: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && renameFeedInput.value.trim()) {
+                onRenameFeed(feed.id, renameFeedInput.value.trim());
+                setRenameFeedInput(null);
+              } else if (e.key === 'Escape') {
+                setRenameFeedInput(null);
+              }
+            }}
+            onBlur={() => {
+              if (renameFeedInput.value.trim() && renameFeedInput.value.trim() !== feed.name) {
+                onRenameFeed(feed.id, renameFeedInput.value.trim());
+              }
+              setRenameFeedInput(null);
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <motion.button
+        key={feed.id}
+        className={`feed-item-btn ${selectedFeedId === feed.id ? "active" : ""} ${dragFeedId === feed.id ? "dragging" : ""}`}
+        style={{ paddingLeft: FEED_BASE_INDENT + depth * INDENT_STEP }}
+        onClick={() => onSelectFeed(feed.id, feed.source)}
+        onContextMenu={(e) => handleFeedContextMenu(e, feed, categoryId)}
+        draggable
+        {...{ onDragStart: (e: React.DragEvent) => handleDragStart(e, feed.id) } as any}
+        {...{ onDragEnd: (e: React.DragEvent) => handleDragEnd(e) } as any}
+        initial={{ opacity: 0, x: -8 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: feedIdx * 0.03, duration: 0.2 }}
+      >
+        <span className="feed-icon" style={{ color: feed.color }}>
+          {feed.icon}
+        </span>
+        <span className="feed-name">{feed.name}</span>
+        {feed.unreadCount > 0 && (
+          <span className="feed-unread">{feed.unreadCount}</span>
+        )}
+        {isRSSHubUrl(feed.url) && (
+          <span className="feed-rsshub-badge" title="Via RSSHub">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+          </span>
+        )}
+      </motion.button>
+    );
+  };
 
   /** Inline input for creating a new subfolder */
   const renderNewFolderInput = (categoryId: string, parentPath: string | undefined, depth: number) => {
@@ -402,7 +450,7 @@ export function SourcePanel({
       <div className="source-panel-header">
         <div className="source-panel-brand">
           <span className="brand-icon">◈</span>
-          <span className="brand-name">SuperFlux</span>
+          <button className="brand-name-btn" onClick={() => setIsAboutOpen(true)}>SuperFlux</button>
           <AnimatedThemeToggler className="theme-toggle-btn" />
           {onClose && (
             <button className="panel-close-btn" onClick={onClose} title="Replier le panneau Sources (1)">
@@ -596,6 +644,84 @@ export function SourcePanel({
         items={allItems}
       />
 
+      <ExpandingPanel
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+        title="SuperFlux"
+        corner="top-left"
+      >
+        <div className="panel-about">
+          <div className="panel-about-hero">
+            <div className="panel-about-logo">◈</div>
+            <div className="panel-about-appname">SuperFlux</div>
+            <div className="panel-about-version">v0.4.0</div>
+            <p className="panel-about-desc">
+              Lecteur RSS moderne et performant. Agrégez vos flux favoris, podcasts, Reddit, YouTube et réseaux sociaux en un seul endroit.
+            </p>
+          </div>
+
+          <div className="panel-section">
+            <div className="panel-section-title">Raccourcis clavier</div>
+            <div className="panel-shortcuts">
+              <div className="panel-shortcut-row">
+                <span className="panel-shortcut-label">Panneau Sources</span>
+                <span className="panel-shortcut-key">1</span>
+              </div>
+              <div className="panel-shortcut-row">
+                <span className="panel-shortcut-label">Panneau Articles</span>
+                <span className="panel-shortcut-key">2</span>
+              </div>
+              <div className="panel-shortcut-row">
+                <span className="panel-shortcut-label">Panneau Lecture</span>
+                <span className="panel-shortcut-key">3</span>
+              </div>
+              <div className="panel-shortcut-row">
+                <span className="panel-shortcut-label">Fermer ce panneau</span>
+                <span className="panel-shortcut-key">Esc</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel-section">
+            <div className="panel-section-title">Fonctionnalités</div>
+            <div className="panel-features-grid">
+              <div className="panel-feature">
+                <span className="panel-feature-icon">◇</span>
+                <span>Flux RSS & Atom</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">⬡</span>
+                <span>Reddit</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">▷</span>
+                <span>YouTube</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">✦</span>
+                <span>Twitter / X</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">🎙</span>
+                <span>Podcasts</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">🌐</span>
+                <span>RSSHub</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">✦</span>
+                <span>Résumés IA</span>
+              </div>
+              <div className="panel-feature">
+                <span className="panel-feature-icon">🔊</span>
+                <span>Lecture vocale</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ExpandingPanel>
+
       {/* ── Context menus ── */}
 
       {/* Category context menu */}
@@ -693,6 +819,16 @@ export function SourcePanel({
             style={{ top: contextMenu.y, left: contextMenu.x }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button
+              className="feed-context-menu-item"
+              onClick={() => {
+                setRenameFeedInput({ feedId: contextMenu.feed.id, value: contextMenu.feed.name });
+                setContextMenu(null);
+              }}
+            >
+              <span className="feed-context-menu-icon">✎</span>
+              Renommer
+            </button>
             <button
               className="feed-context-menu-item feed-context-menu-item--danger"
               onClick={() => { onRemoveFeed(contextMenu.feed.id); setContextMenu(null); }}

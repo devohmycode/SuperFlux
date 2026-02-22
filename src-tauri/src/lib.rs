@@ -471,6 +471,8 @@ async fn tts_speak_elevenlabs(
         voice_id
     );
     let model = model_id.unwrap_or_else(|| "eleven_multilingual_v2".to_string());
+    eprintln!("[elevenlabs] voice={voice_id}, model={model}, text_len={}", text.len());
+
     let body = serde_json::json!({
         "text": text,
         "model_id": model,
@@ -483,11 +485,16 @@ async fn tts_speak_elevenlabs(
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("ElevenLabs request failed: {e}"))?;
+        .map_err(|e| {
+            eprintln!("[elevenlabs] Request failed: {e}");
+            format!("ElevenLabs request failed: {e}")
+        })?;
 
     let status = response.status();
+    eprintln!("[elevenlabs] Response status: {status}");
     if !status.is_success() {
         let err_body = response.text().await.unwrap_or_default();
+        eprintln!("[elevenlabs] Error body: {err_body}");
         return Err(format!("ElevenLabs HTTP {status}: {err_body}"));
     }
 
@@ -496,6 +503,7 @@ async fn tts_speak_elevenlabs(
         .await
         .map_err(|e| format!("ElevenLabs read body: {e}"))?;
 
+    eprintln!("[elevenlabs] Audio received: {} bytes", bytes.len());
     Ok(STANDARD.encode(&bytes))
 }
 

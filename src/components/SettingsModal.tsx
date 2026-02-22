@@ -12,6 +12,7 @@ import { getTtsConfig, saveTtsConfig, speak as ttsSpeak, stop as ttsStop, type T
 import { getTranslationConfig, saveTranslationConfig, LANGUAGES } from '../services/translationService';
 import { usePro } from '../contexts/ProContext';
 import { PRO_LIMITS } from '../services/licenseService';
+import { getRSSHubInstance, setRSSHubInstance as setRSSHubInstanceConfig } from '../services/rsshubService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -140,6 +141,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: 
 
   // ── Translation state ──
   const [translationLang, setTranslationLang] = useState(() => getTranslationConfig().targetLanguage);
+
+  // ── RSSHub state ──
+  const [rsshubInstance, setRsshubInstance] = useState(getRSSHubInstance);
 
   const handleTtsEngineChange = useCallback((engine: TtsEngine) => {
     const updated = { ...ttsConfig, engine };
@@ -526,6 +530,29 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: 
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* ── RSSHub ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">RSSHub</h3>
+                <p className="settings-section-desc">
+                  Instance RSSHub utilisée pour convertir les sites web en flux RSS.
+                </p>
+                <div className="settings-row">
+                  <label className="settings-label" htmlFor="rsshub-instance">Instance URL</label>
+                  <input
+                    id="rsshub-instance"
+                    type="text"
+                    className="form-input"
+                    style={{ width: '100%', marginTop: 4 }}
+                    placeholder="https://rsshub.app"
+                    value={rsshubInstance}
+                    onChange={(e) => {
+                      setRsshubInstance(e.target.value);
+                      setRSSHubInstanceConfig(e.target.value);
+                    }}
+                  />
+                </div>
               </div>
 
               {/* ── Fournisseur RSS ── */}

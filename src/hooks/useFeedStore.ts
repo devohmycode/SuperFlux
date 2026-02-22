@@ -8,6 +8,8 @@ const STORAGE_KEYS = {
   ITEMS: 'superflux_items',
   LAST_SYNC: 'superflux_last_sync',
   FOLDERS: 'superflux_folders',
+  FAVORITES_ORDER: 'superflux_favorites_order',
+  READLATER_ORDER: 'superflux_readlater_order',
 };
 
 // Default source styling
@@ -123,6 +125,7 @@ export interface FeedStore {
   // Actions
   addFeed: (url: string, name: string, source: FeedSource) => Promise<Feed>;
   removeFeed: (feedId: string) => void;
+  renameFeed: (feedId: string, newName: string) => void;
   syncFeed: (feedId: string) => Promise<void>;
   syncAll: () => Promise<void>;
   markAsRead: (itemId: string) => void;
@@ -137,6 +140,12 @@ export interface FeedStore {
   getItemsByFeed: (feedId: string) => FeedItem[];
   getItemsBySource: (source: FeedSource) => FeedItem[];
   getAllItems: () => FeedItem[];
+
+  // Ordering for favorites / read later
+  getFavoritesOrder: () => string[];
+  getReadLaterOrder: () => string[];
+  reorderFavorites: (orderedIds: string[]) => void;
+  reorderReadLater: (orderedIds: string[]) => void;
 
   // Folder actions (paths like "Tech/Frontend/React")
   createFolder: (categoryId: string, name: string, parentPath?: string) => void;
@@ -267,6 +276,13 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setFeeds(prev => prev.filter(f => f.id !== feedId));
     setItems(prev => prev.filter(i => i.feedId !== feedId));
     cbRef.current?.onFeedRemoved?.(feedId);
+  }, []);
+
+  // Rename a feed
+  const renameFeed = useCallback((feedId: string, newName: string) => {
+    if (!newName.trim()) return;
+    setFeeds(prev => prev.map(f => f.id === feedId ? { ...f, name: newName.trim() } : f));
+    setItems(prev => prev.map(i => i.feedId === feedId ? { ...i, feedName: newName.trim() } : i));
   }, []);
 
   // Sync a single feed
@@ -515,6 +531,24 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setFeeds(prev => prev.map(f => f.id === feedId ? { ...f, folder } : f));
   }, []);
 
+  // ── Favorites / Read Later ordering ──
+
+  const getFavoritesOrder = useCallback((): string[] => {
+    return loadFromStorage<string[]>(STORAGE_KEYS.FAVORITES_ORDER, []);
+  }, []);
+
+  const getReadLaterOrder = useCallback((): string[] => {
+    return loadFromStorage<string[]>(STORAGE_KEYS.READLATER_ORDER, []);
+  }, []);
+
+  const reorderFavorites = useCallback((orderedIds: string[]) => {
+    saveToStorage(STORAGE_KEYS.FAVORITES_ORDER, orderedIds);
+  }, []);
+
+  const reorderReadLater = useCallback((orderedIds: string[]) => {
+    saveToStorage(STORAGE_KEYS.READLATER_ORDER, orderedIds);
+  }, []);
+
   return {
     feeds,
     items,
@@ -525,6 +559,7 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     syncError,
     addFeed,
     removeFeed,
+    renameFeed,
     syncFeed,
     syncAll,
     markAsRead,
@@ -539,6 +574,10 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     getItemsByFeed,
     getItemsBySource,
     getAllItems,
+    getFavoritesOrder,
+    getReadLaterOrder,
+    reorderFavorites,
+    reorderReadLater,
     createFolder,
     renameFolder,
     deleteFolder,

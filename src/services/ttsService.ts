@@ -41,6 +41,9 @@ let activeAudio: HTMLAudioElement | null = null;
 
 type StatusCallback = (status: 'idle' | 'playing') => void;
 
+// ElevenLabs has a per-request character limit (~5000 for most plans)
+const ELEVENLABS_MAX_CHARS = 5000;
+
 export async function speak(text: string, onEnd?: StatusCallback): Promise<void> {
   const config = getTtsConfig();
 
@@ -56,8 +59,12 @@ export async function speak(text: string, onEnd?: StatusCallback): Promise<void>
       if (!apiKey) {
         throw new Error('Clé API ElevenLabs manquante (VITE_ELEVENLABS_API_KEY)');
       }
+      // Truncate to avoid API limit errors
+      const truncatedText = text.length > ELEVENLABS_MAX_CHARS
+        ? text.slice(0, ELEVENLABS_MAX_CHARS - 3) + '...'
+        : text;
       const base64: string = await invoke('tts_speak_elevenlabs', {
-        text,
+        text: truncatedText,
         apiKey,
         voiceId: config.elevenLabsVoiceId,
         modelId: config.elevenLabsModelId,
@@ -73,7 +80,8 @@ export async function speak(text: string, onEnd?: StatusCallback): Promise<void>
         activeAudio = null;
         onEnd?.('idle');
       };
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('[TTS] Audio playback error:', e);
         activeAudio = null;
         onEnd?.('idle');
       };
