@@ -4,12 +4,14 @@ import { httpRequest } from '../lib/tauriFetch';
 
 export interface TranslationConfig {
   targetLanguage: string;
+  autoTranslate: boolean;
 }
 
 const STORAGE_KEY = 'superflux_translation_config';
 
 const DEFAULT_CONFIG: TranslationConfig = {
   targetLanguage: 'fr',
+  autoTranslate: false,
 };
 
 export function getTranslationConfig(): TranslationConfig {
