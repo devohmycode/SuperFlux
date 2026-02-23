@@ -4,7 +4,7 @@ import type { FeedComment, FeedItem, SummaryFormat, TextHighlight, HighlightColo
 import { AudioPlayer } from './AudioPlayer';
 import { fetchViaBackend, openExternal } from '../lib/tauriFetch';
 import { summarizeArticle } from '../services/llmService';
-import { translateText, getTranslationConfig } from '../services/translationService';
+import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
 import { extractArticle, isContentTruncated } from '../services/articleExtractor';
 import { applyHighlights } from '../lib/highlightHtml';
 import * as ttsService from '../services/ttsService';
@@ -53,6 +53,7 @@ interface ReaderPanelProps {
   onHighlightAdd?: (itemId: string, text: string, color: HighlightColor, prefix: string, suffix: string) => void;
   onHighlightRemove?: (itemId: string, highlightId: string) => void;
   onHighlightNoteUpdate?: (itemId: string, highlightId: string, note: string) => void;
+  onBackToFeeds?: () => void;
   onClose?: () => void;
 }
 
@@ -169,7 +170,7 @@ function parseRedditPayload(payload: unknown, maxComments = 30): { comments: Fee
 
 const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'orange'];
 
-export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onClose }: ReaderPanelProps) {
+export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onBackToFeeds, onClose }: ReaderPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useState<ViewMode>('reader');
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>('idle');
@@ -240,12 +241,13 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     setSelectedText('');
     setHighlightsMenuOpen(false);
     setEditingNoteId(null);
-    // Reset translation
+    // Reset translation (keep autoTranslate intent)
     setTranslateState('idle');
     setTranslatedHtml('');
     setTranslatedTitle('');
     setTranslateError('');
-    setShowTranslation(false);
+    const { autoTranslate } = getTranslationConfig();
+    setShowTranslation(autoTranslate);
     // Reset or restore full content
     if (item?.fullContent) {
       setFullContentStatus('done');
@@ -256,6 +258,32 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       setFullContentError('');
     }
   }, [item?.id]);
+
+  // Auto-translate when autoTranslate is enabled and a new article loads
+  useEffect(() => {
+    if (!item || !showTranslation || translateState !== 'idle') return;
+    const config = getTranslationConfig();
+    if (!config.autoTranslate) return;
+
+    const contentToTranslate = item.fullContent || item.content;
+    if (!contentToTranslate) return;
+
+    setTranslateState('loading');
+    setTranslateError('');
+    Promise.all([
+      translateText(contentToTranslate, config.targetLanguage),
+      translateText(item.title, config.targetLanguage),
+    ]).then(([result, titleResult]) => {
+      setTranslatedHtml(result);
+      setTranslatedTitle(titleResult);
+      setTranslateState('done');
+    }).catch((e) => {
+      setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
+      setTranslateState('error');
+      setShowTranslation(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, showTranslation, translateState]);
 
   // Auto-fetch full content when RSS content is truncated
   // Only depends on item?.id — all item properties are stable for a given id,
@@ -663,9 +691,11 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
 
   const handleTranslate = useCallback(async () => {
     if (!item) return;
-    // Toggle: if already translated, just switch view
+    // Toggle: if already translated, just switch view and update global pref
     if (translateState === 'done') {
-      setShowTranslation(prev => !prev);
+      const next = !showTranslation;
+      setShowTranslation(next);
+      saveTranslationConfig({ autoTranslate: next });
       return;
     }
     if (translateState === 'loading') return;
@@ -673,6 +703,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     setTranslateState('loading');
     setTranslateError('');
     setShowTranslation(true);
+    saveTranslationConfig({ autoTranslate: true });
     try {
       const config = getTranslationConfig();
       const contentToTranslate = fullContentHtml || item.fullContent || item.content;
@@ -791,6 +822,12 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               <button className="reader-tool-btn back-btn" onClick={handleReaderView} title="Retour au mode lecture">
                 ←
               </button>
+
+              {onBackToFeeds && (
+                <button className="reader-tool-btn back-feeds-btn" onClick={() => { handleReaderView(); onBackToFeeds(); }} title="Retour aux flux">
+                  ◈
+                </button>
+              )}
 
               <div className="reader-toolbar-divider" />
 

@@ -4,7 +4,7 @@ import type { FeedCategory, FeedItem, FeedSource } from '../types';
 import MorphingPageDots from './ui/morphing-page-dots';
 import { usePro } from '../contexts/ProContext';
 import { summarizeDigest } from '../services/llmService';
-import { translateText, getTranslationConfig } from '../services/translationService';
+import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
 
 const ITEMS_PER_PAGE = 8;
 
@@ -177,7 +177,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   const [digestOpen, setDigestOpen] = useState(true);
 
   // ── Translation ──
-  const [translateActive, setTranslateActive] = useState(false);
+  const [translateActive, setTranslateActive] = useState(() => getTranslationConfig().autoTranslate);
   const [translateLoading, setTranslateLoading] = useState(false);
   const [translatedItems, setTranslatedItems] = useState<Record<string, { title: string; excerpt: string }>>({});
 
@@ -187,7 +187,12 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
 
   // Reset to page 0 and digest when items source changes
   const itemsKey = `${selectedFeedId}-${selectedSource}-${showFavorites}-${showReadLater}`;
-  useEffect(() => { setCurrentPage(0); setDigestState('idle'); setDigestText(''); setDigestError(''); setTranslateActive(false); setTranslatedItems({}); }, [itemsKey]);
+  useEffect(() => {
+    setCurrentPage(0);
+    setDigestState('idle'); setDigestText(''); setDigestError('');
+    setTranslatedItems({});
+    setTranslateActive(getTranslationConfig().autoTranslate);
+  }, [itemsKey]);
 
   // Clamp page if items shrink
   useEffect(() => {
@@ -228,9 +233,14 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
 
   const handleTranslateList = useCallback(async () => {
     if (translateLoading) return;
-    if (translateActive) { setTranslateActive(false); return; }
+    if (translateActive) {
+      setTranslateActive(false);
+      saveTranslationConfig({ autoTranslate: false });
+      return;
+    }
 
     setTranslateActive(true);
+    saveTranslationConfig({ autoTranslate: true });
     setTranslateLoading(true);
     try {
       const config = getTranslationConfig();
@@ -255,6 +265,38 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
       setTranslateLoading(false);
     }
   }, [translateLoading, translateActive, paginatedItems, translatedItems]);
+
+  // Auto-translate current page when autoTranslate is enabled
+  useEffect(() => {
+    if (!translateActive || translateLoading) return;
+    const untranslated = paginatedItems.filter(i => !translatedItems[i.id]);
+    if (untranslated.length === 0) return;
+
+    const config = getTranslationConfig();
+    if (!config.autoTranslate) return;
+
+    setTranslateLoading(true);
+    Promise.all(
+      untranslated.map(async (item) => {
+        const [title, excerpt] = await Promise.all([
+          translateText(item.title, config.targetLanguage),
+          item.excerpt ? translateText(item.excerpt, config.targetLanguage) : Promise.resolve(''),
+        ]);
+        return { id: item.id, title, excerpt };
+      })
+    ).then((results) => {
+      setTranslatedItems(prev => {
+        const next = { ...prev };
+        for (const r of results) next[r.id] = { title: r.title, excerpt: r.excerpt };
+        return next;
+      });
+    }).catch(() => {
+      setTranslateActive(false);
+    }).finally(() => {
+      setTranslateLoading(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [translateActive, paginatedItems]);
 
   // Close on click outside or Escape
   useEffect(() => {

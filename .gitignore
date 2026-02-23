@@ -144,3 +144,8 @@ vite.config.ts.timestamp-*
 .vite/
 
 src-tauri/target/
+
+# Android signing
+*.keystore
+*.jks
+keystore.properties

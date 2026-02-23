@@ -40,6 +40,8 @@ interface SourcePanelProps {
   onDeleteFolder: (categoryId: string, path: string) => void;
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
   onClose?: () => void;
+  brandMode: 'flux' | 'note' | 'bookmark';
+  onToggleBrand: () => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -120,6 +122,8 @@ export function SourcePanel({
   onDeleteFolder,
   onMoveFeedToFolder,
   onClose,
+  brandMode,
+  onToggleBrand,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
 
@@ -450,7 +454,9 @@ export function SourcePanel({
       <div className="source-panel-header">
         <div className="source-panel-brand">
           <span className="brand-icon">◈</span>
-          <button className="brand-name-btn" onClick={() => setIsAboutOpen(true)}>SuperFlux</button>
+          <button className="brand-name-btn" onClick={onToggleBrand}>
+            {brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : 'SuperBookmark'}
+          </button>
           <AnimatedThemeToggler className="theme-toggle-btn" />
           {onClose && (
             <button className="panel-close-btn" onClick={onClose} title="Replier le panneau Sources (1)">
@@ -461,6 +467,10 @@ export function SourcePanel({
       </div>
 
       <div className="source-panel-content">
+        {brandMode !== 'flux' ? (
+          <div className="panel-empty-note" />
+        ) : (
+        <>
         <button
           className={`source-all-btn ${!selectedFeedId && !selectedSource && !showFavorites && !showReadLater ? "active" : ""}`}
           onClick={onSelectAll}
@@ -570,16 +580,18 @@ export function SourcePanel({
             );
           })}
         </div>
+        </>
+        )}
       </div>
 
-      {syncError && (
+      {brandMode === 'flux' && syncError && (
         <div className="sync-error-banner" title={syncError}>
           <span className="sync-error-icon">⚠</span>
           <span className="sync-error-text">{syncError}</span>
         </div>
       )}
 
-      <div className="source-panel-footer">
+      {brandMode === 'flux' && <div className="source-panel-footer">
         <SyncButton
           showLabel={false}
           onSync={onSync}
@@ -622,7 +634,7 @@ export function SourcePanel({
           </button>
         )}
         <UserMenu />
-      </div>
+      </div>}
 
       <AddFeedModal
         isOpen={isAddModalOpen}

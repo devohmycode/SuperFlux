@@ -62,6 +62,8 @@ export default function App() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showReadLater, setShowReadLater] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark'>('flux');
+  const [brandTransition, setBrandTransition] = useState(false);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
@@ -271,6 +273,18 @@ export default function App() {
     setFeedPanelOpen(true);
   }, []);
 
+  const handleToggleBrand = useCallback(() => {
+    setBrandTransition(true);
+    // At the midpoint of the animation, switch the mode
+    setTimeout(() => {
+      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux');
+    }, 600);
+    // Close the transition overlay after the animation completes
+    setTimeout(() => {
+      setBrandTransition(false);
+    }, 1200);
+  }, []);
+
   const handleCloseSourcePanel = useCallback(() => {
     setSourcePanelOpen(false);
   }, []);
@@ -313,6 +327,16 @@ export default function App() {
       <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} />
       {!isCollapsed && (
         <div className="app" ref={containerRef}>
+          {/* Brand transition overlay */}
+          {brandTransition && (
+            <div
+              className="brand-transition-overlay"
+              style={{
+                clipPath: `circle(${brandTransition ? '150%' : '0%'} at 0% 0%)`,
+              }}
+            />
+          )}
+
           {sourcePanelOpen ? (
             <>
               <div className="panel panel-source" style={allOpen ? { width: `${widths[0]}%` } : { flex: 1 }}>
@@ -343,6 +367,8 @@ export default function App() {
                   onDeleteFolder={store.deleteFolder}
                   onMoveFeedToFolder={store.moveFeedToFolder}
                   onClose={handleCloseSourcePanel}
+                  brandMode={brandMode}
+                  onToggleBrand={handleToggleBrand}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -356,22 +382,26 @@ export default function App() {
           {feedPanelOpen ? (
             <>
               <div className="panel panel-feed" style={allOpen ? { width: `${widths[1]}%` } : { flex: 1 }}>
-                <FeedPanel
-                  categories={store.categories}
-                  items={items}
-                  selectedFeedId={selectedFeedId}
-                  selectedSource={selectedSource}
-                  selectedItemId={selectedItem?.id || null}
-                  showFavorites={showFavorites}
-                  showReadLater={showReadLater}
-                  onSelectItem={handleSelectItem}
-                  onMarkAllAsRead={() => store.markAllAsRead(selectedFeedId || undefined)}
-                  onToggleRead={store.toggleRead}
-                  onToggleStar={store.toggleStar}
-                  onToggleBookmark={store.toggleBookmark}
-                  onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
-                  onClose={handleCloseFeedPanel}
-                />
+                {brandMode !== 'flux' ? (
+                  <div className="panel-empty-note" />
+                ) : (
+                  <FeedPanel
+                    categories={store.categories}
+                    items={items}
+                    selectedFeedId={selectedFeedId}
+                    selectedSource={selectedSource}
+                    selectedItemId={selectedItem?.id || null}
+                    showFavorites={showFavorites}
+                    showReadLater={showReadLater}
+                    onSelectItem={handleSelectItem}
+                    onMarkAllAsRead={() => store.markAllAsRead(selectedFeedId || undefined)}
+                    onToggleRead={store.toggleRead}
+                    onToggleStar={store.toggleStar}
+                    onToggleBookmark={store.toggleBookmark}
+                    onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
+                    onClose={handleCloseFeedPanel}
+                  />
+                )}
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(1, e)} />}
             </>
@@ -383,29 +413,34 @@ export default function App() {
 
           {readerPanelOpen ? (
             <div className="panel panel-reader" style={{ flex: 1 }}>
-              <ReaderPanel
-                item={selectedItem}
-                onToggleStar={() => selectedItem && store.toggleStar(selectedItem.id)}
-                onSummaryGenerated={(itemId, summary) => store.setSummary(itemId, summary)}
-                onFullContentExtracted={(itemId, fullContent) => store.setFullContent(itemId, fullContent)}
-                breadcrumb={{
-                  sourceName,
-                  feedName,
-                  itemTitle: selectedItem?.title || null,
-                  onClickAll: handleBreadcrumbAll,
-                  onClickSource: handleBreadcrumbSource,
-                  onClickFeed: handleBreadcrumbFeed,
-                }}
-                feedPanelOpen={feedPanelOpen}
-                highlights={selectedHighlights}
-                onHighlightAdd={(itemId, text, color, prefix, suffix) =>
-                  highlightStore.addHighlight(itemId, text, color, prefix, suffix)}
-                onHighlightRemove={(itemId, highlightId) =>
-                  highlightStore.removeHighlight(itemId, highlightId)}
-                onHighlightNoteUpdate={(itemId, highlightId, note) =>
-                  highlightStore.updateHighlightNote(itemId, highlightId, note)}
-                onClose={handleCloseReaderPanel}
-              />
+              {brandMode !== 'flux' ? (
+                <div className="panel-empty-note" />
+              ) : (
+                <ReaderPanel
+                  item={selectedItem}
+                  onToggleStar={() => selectedItem && store.toggleStar(selectedItem.id)}
+                  onSummaryGenerated={(itemId, summary) => store.setSummary(itemId, summary)}
+                  onFullContentExtracted={(itemId, fullContent) => store.setFullContent(itemId, fullContent)}
+                  breadcrumb={{
+                    sourceName,
+                    feedName,
+                    itemTitle: selectedItem?.title || null,
+                    onClickAll: handleBreadcrumbAll,
+                    onClickSource: handleBreadcrumbSource,
+                    onClickFeed: handleBreadcrumbFeed,
+                  }}
+                  feedPanelOpen={feedPanelOpen}
+                  highlights={selectedHighlights}
+                  onHighlightAdd={(itemId, text, color, prefix, suffix) =>
+                    highlightStore.addHighlight(itemId, text, color, prefix, suffix)}
+                  onHighlightRemove={(itemId, highlightId) =>
+                    highlightStore.removeHighlight(itemId, highlightId)}
+                  onHighlightNoteUpdate={(itemId, highlightId, note) =>
+                    highlightStore.updateHighlightNote(itemId, highlightId, note)}
+                  onBackToFeeds={handleBreadcrumbAll}
+                  onClose={handleCloseReaderPanel}
+                />
+              )}
             </div>
           ) : (
             <div className="panel-strip" onClick={() => setReaderPanelOpen(true)} title="Ouvrir le panneau Lecture (3)">
