@@ -1,14 +1,16 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { SourcePanel } from './components/SourcePanel';
+import { SourcePanel, getPinnedItems, type PinEntry } from './components/SourcePanel';
 import { FeedPanel } from './components/FeedPanel';
 import { ReaderPanel } from './components/ReaderPanel';
+import { NotePanel, type Note } from './components/NotePanel';
+import { NoteEditor } from './components/NoteEditor';
 import { ResizeHandle } from './components/ResizeHandle';
 import { TitleBar } from './components/TitleBar';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useFeedStore, type FeedStoreCallbacks } from './hooks/useFeedStore';
 import { useHighlightStore } from './hooks/useHighlightStore';
 import { useAuth } from './contexts/AuthContext';
-import { SyncService } from './services/syncService';
+import { SyncService, SYNC_ERROR_EVENT } from './services/syncService';
 import { getProviderConfig, ProviderSyncService } from './services/providerSync';
 import type { NewFeedData } from './components/AddFeedModal';
 import type { FeedItem, FeedSource } from './types';
@@ -23,7 +25,17 @@ const sourceLabels: Record<FeedSource, string> = {
   podcast: 'Podcasts',
 };
 
-const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const SYNC_INTERVAL_KEY = 'superflux_sync_interval';
+const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const SHOW_SYSINFO_KEY = 'superflux_show_sysinfo';
+
+function getSyncInterval(): number {
+  try {
+    const v = localStorage.getItem(SYNC_INTERVAL_KEY);
+    if (v) return Number(v);
+  } catch { /* ignore */ }
+  return DEFAULT_SYNC_INTERVAL;
+}
 
 export default function App() {
   const { user } = useAuth();
@@ -53,6 +65,18 @@ export default function App() {
   const store = useFeedStore(syncCallbacks);
   const highlightStore = useHighlightStore();
 
+  // Surface sync errors as a visible toast
+  const [syncError, setSyncError] = useState<string | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { operation: string; message: string };
+      setSyncError(`Sync: ${detail.operation} — ${detail.message}`);
+      setTimeout(() => setSyncError(null), 8000);
+    };
+    window.addEventListener(SYNC_ERROR_EVENT, handler);
+    return () => window.removeEventListener(SYNC_ERROR_EVENT, handler);
+  }, []);
+
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<FeedSource | null>(null);
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
@@ -64,6 +88,101 @@ export default function App() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark'>('flux');
   const [brandTransition, setBrandTransition] = useState(false);
+  const [syncInterval, setSyncInterval] = useState(getSyncInterval);
+  const [pinnedItems, setPinnedItems] = useState<PinEntry[]>(getPinnedItems);
+  const [showSysInfo, setShowSysInfo] = useState(() => {
+    try { return localStorage.getItem(SHOW_SYSINFO_KEY) !== 'false'; }
+    catch { return true; }
+  });
+
+  const handleShowSysInfoChange = useCallback((show: boolean) => {
+    setShowSysInfo(show);
+    localStorage.setItem(SHOW_SYSINFO_KEY, String(show));
+  }, []);
+
+  // ── Notes state (SuperNote mode) ──
+  const [notes, setNotes] = useState<Note[]>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_notes');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [noteFolders, setNoteFolders] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_note_folders');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [selectedNoteFolder, setSelectedNoteFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_notes', JSON.stringify(notes)); }
+    catch { /* ignore */ }
+  }, [notes]);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_note_folders', JSON.stringify(noteFolders)); }
+    catch { /* ignore */ }
+  }, [noteFolders]);
+
+  const selectedNote = useMemo(() =>
+    notes.find(n => n.id === selectedNoteId) ?? null,
+  [notes, selectedNoteId]);
+
+  // Notes filtered by selected folder
+  const filteredNotes = useMemo(() => {
+    if (selectedNoteFolder === null) return notes;
+    return notes.filter(n => n.folder === selectedNoteFolder);
+  }, [notes, selectedNoteFolder]);
+
+  const handleAddNote = useCallback(() => {
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      title: 'Nouvelle note',
+      content: '',
+      folder: selectedNoteFolder ?? undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setNotes(prev => [newNote, ...prev]);
+    setSelectedNoteId(newNote.id);
+  }, [selectedNoteFolder]);
+
+  const handleDeleteNote = useCallback((noteId: string) => {
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+    setSelectedNoteId(prev => prev === noteId ? null : prev);
+  }, []);
+
+  const handleUpdateNote = useCallback((noteId: string, updates: Partial<Note>) => {
+    setNotes(prev => prev.map(n =>
+      n.id === noteId
+        ? { ...n, ...updates, updatedAt: new Date().toISOString() }
+        : n
+    ));
+  }, []);
+
+  const handleCreateNoteFolder = useCallback((name: string) => {
+    setNoteFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameNoteFolder = useCallback((oldName: string, newName: string) => {
+    setNoteFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setNotes(prev => prev.map(n => n.folder === oldName ? { ...n, folder: newName } : n));
+    if (selectedNoteFolder === oldName) setSelectedNoteFolder(newName);
+  }, [selectedNoteFolder]);
+
+  const handleDeleteNoteFolder = useCallback((name: string) => {
+    setNoteFolders(prev => prev.filter(f => f !== name));
+    setNotes(prev => prev.map(n => n.folder === name ? { ...n, folder: undefined } : n));
+    if (selectedNoteFolder === name) setSelectedNoteFolder(null);
+  }, [selectedNoteFolder]);
+
+  const handleMoveNoteToFolder = useCallback((noteId: string, folder: string | undefined) => {
+    setNotes(prev => prev.map(n =>
+      n.id === noteId ? { ...n, folder, updatedAt: new Date().toISOString() } : n
+    ));
+  }, []);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
@@ -91,16 +210,16 @@ export default function App() {
     prevUserRef.current = userId;
   }, [user]);
 
-  // Periodic fullSync every 5 minutes while logged in
+  // Periodic fullSync at configured interval while logged in
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
       SyncService.fullSync().catch(err => console.error('[sync] periodic fullSync failed', err));
-    }, SYNC_INTERVAL);
+    }, syncInterval);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, syncInterval]);
 
-  // Provider sync: initial sync + periodic interval (5 min)
+  // Provider sync: initial sync + periodic interval
   useEffect(() => {
     const pConfig = getProviderConfig();
     if (!pConfig?.syncEnabled) return;
@@ -115,10 +234,10 @@ export default function App() {
       if (!currentConfig?.syncEnabled) return;
       ProviderSyncService.syncStatuses(currentConfig)
         .catch(err => console.error('[providerSync] periodic sync failed', err));
-    }, SYNC_INTERVAL);
+    }, syncInterval);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [syncInterval]);
 
   // Get items based on selection
   const items = useMemo(() => {
@@ -278,6 +397,7 @@ export default function App() {
     // At the midpoint of the animation, switch the mode
     setTimeout(() => {
       setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux');
+      setSelectedNoteId(null);
     }, 600);
     // Close the transition overlay after the animation completes
     setTimeout(() => {
@@ -324,7 +444,7 @@ export default function App() {
 
   return (
     <div className={`app-wrapper ${isCollapsed ? 'app-wrapper--collapsed' : ''}`}>
-      <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} />
+      <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} pinnedItems={pinnedItems} categories={store.categories} onSelectFeed={handleSelectFeed} onSync={handleSyncAll} isSyncing={store.isSyncing} showSysInfo={showSysInfo} />
       {!isCollapsed && (
         <div className="app" ref={containerRef}>
           {/* Brand transition overlay */}
@@ -369,6 +489,22 @@ export default function App() {
                   onClose={handleCloseSourcePanel}
                   brandMode={brandMode}
                   onToggleBrand={handleToggleBrand}
+                  onSyncIntervalChange={setSyncInterval}
+                  onShowSysInfoChange={handleShowSysInfoChange}
+                  showSysInfo={showSysInfo}
+                  onPinsChange={setPinnedItems}
+                  notes={notes}
+                  noteFolders={noteFolders}
+                  selectedNoteId={selectedNoteId}
+                  selectedNoteFolder={selectedNoteFolder}
+                  onSelectNote={setSelectedNoteId}
+                  onSelectNoteFolder={setSelectedNoteFolder}
+                  onAddNote={handleAddNote}
+                  onCreateNoteFolder={handleCreateNoteFolder}
+                  onRenameNoteFolder={handleRenameNoteFolder}
+                  onDeleteNoteFolder={handleDeleteNoteFolder}
+                  onMoveNoteToFolder={handleMoveNoteToFolder}
+                  onDeleteNote={handleDeleteNote}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -382,7 +518,16 @@ export default function App() {
           {feedPanelOpen ? (
             <>
               <div className="panel panel-feed" style={allOpen ? { width: `${widths[1]}%` } : { flex: 1 }}>
-                {brandMode !== 'flux' ? (
+                {brandMode === 'note' ? (
+                  <NotePanel
+                    notes={filteredNotes}
+                    selectedNoteId={selectedNoteId}
+                    onSelectNote={setSelectedNoteId}
+                    onAddNote={handleAddNote}
+                    onDeleteNote={handleDeleteNote}
+                    onUpdateNote={handleUpdateNote}
+                  />
+                ) : brandMode === 'bookmark' ? (
                   <div className="panel-empty-note" />
                 ) : (
                   <FeedPanel
@@ -395,6 +540,7 @@ export default function App() {
                     showReadLater={showReadLater}
                     onSelectItem={handleSelectItem}
                     onMarkAllAsRead={() => store.markAllAsRead(selectedFeedId || undefined)}
+                    onMarkAllAsUnread={() => store.markAllAsUnread(selectedFeedId || undefined)}
                     onToggleRead={store.toggleRead}
                     onToggleStar={store.toggleStar}
                     onToggleBookmark={store.toggleBookmark}
@@ -413,7 +559,13 @@ export default function App() {
 
           {readerPanelOpen ? (
             <div className="panel panel-reader" style={{ flex: 1 }}>
-              {brandMode !== 'flux' ? (
+              {brandMode === 'note' ? (
+                <NoteEditor
+                  note={selectedNote}
+                  onUpdateNote={handleUpdateNote}
+                  onClose={() => setSelectedNoteId(null)}
+                />
+              ) : brandMode === 'bookmark' ? (
                 <div className="panel-empty-note" />
               ) : (
                 <ReaderPanel
@@ -450,6 +602,16 @@ export default function App() {
         </div>
       )}
       <UpgradeModal />
+      {syncError && (
+        <div style={{
+          position: 'fixed', bottom: 16, right: 16, zIndex: 9999,
+          background: '#dc2626', color: '#fff', padding: '10px 16px',
+          borderRadius: 8, fontSize: 13, maxWidth: 420, boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+          cursor: 'pointer',
+        }} onClick={() => setSyncError(null)}>
+          {syncError}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
 interface AuthState {
   user: User | null;
@@ -52,13 +55,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: 'google' | 'github') => {
-    const { error } = await supabase.auth.signInWithOAuth({ provider });
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        skipBrowserRedirect: true,
+        redirectTo: 'http://localhost/auth/callback',
+      },
+    });
     if (error) throw error;
+    if (!data.url) return;
+
+    // Listen for the auth callback from the Tauri auth window
+    const unlisten = await listen<string>('auth-callback', async (event) => {
+      unlisten();
+      // Close the auth window
+      const authWindow = await WebviewWindow.getByLabel('auth');
+      if (authWindow) await authWindow.close();
+
+      // Extract PKCE code from callback URL and establish session
+      try {
+        const callbackUrl = new URL(event.payload);
+        const code = callbackUrl.searchParams.get('code');
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          // Explicitly update auth state so downstream sync triggers immediately
+          if (data.session) {
+            setState({ user: data.session.user, session: data.session, loading: false });
+          }
+        }
+      } catch (e) {
+        console.error('[auth] Failed to exchange code:', e);
+      }
+    });
+
+    // Open a separate Tauri window for the OAuth flow
+    await invoke('open_auth_window', { url: data.url });
   }, []);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    // Clear all user data from localStorage
+    const userDataKeys = [
+      'superflux_feeds',
+      'superflux_items',
+      'superflux_folders',
+      'superflux_favorites_order',
+      'superflux_readlater_order',
+      'superflux_highlights',
+      'superflux_notes',
+      'superflux_note_folders',
+      'superflux_last_sync',
+    ];
+    userDataKeys.forEach(key => localStorage.removeItem(key));
   }, []);
 
   return (

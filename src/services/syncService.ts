@@ -43,7 +43,6 @@ function feedToRow(feed: Feed, userId: string) {
     icon: feed.icon,
     url: feed.url,
     color: feed.color,
-    folder: feed.folder ?? null,
     updated_at: feed.updated_at ?? new Date().toISOString(),
   };
 }
@@ -105,27 +104,83 @@ function rowToItem(row: Record<string, unknown>): Partial<FeedItem> {
   };
 }
 
+// --------------- Sync error event (surfaces errors in the UI) ---------
+
+export const SYNC_ERROR_EVENT = 'superflux-sync-error';
+
+function dispatchSyncError(operation: string, error: unknown) {
+  const msg = error && typeof error === 'object' && 'message' in error
+    ? (error as { message: string }).message
+    : String(error);
+  console.error(`[sync] ${operation}:`, error);
+  window.dispatchEvent(new CustomEvent(SYNC_ERROR_EVENT, { detail: { operation, message: msg } }));
+}
+
+// --------------- Feed cache + in-flight tracking ----------------------
+// Solves race condition: pushNewItems may fire before pushFeed completes
+// and before React's useEffect saves the feed to localStorage.
+
+const _feedsCache = new Map<string, Feed>();           // feedId → Feed
+const _pushFeedPromises = new Map<string, Promise<void>>(); // feedId → in-flight promise
+
+/** Ensure a feed exists in Supabase. Awaits any in-flight pushFeed, then upserts. */
+async function ensureFeedInSupabase(feedId: string, userId: string): Promise<boolean> {
+  // Wait for any in-flight pushFeed for this feedId
+  const pending = _pushFeedPromises.get(feedId);
+  if (pending) {
+    await pending;
+    return true; // pushFeed handled it
+  }
+
+  // Find feed data: in-memory cache first, then localStorage
+  const feed = _feedsCache.get(feedId)
+    ?? loadLocal<Feed[]>(STORAGE_KEYS.FEEDS, []).find(f => f.id === feedId);
+  if (!feed) {
+    console.warn('[sync] ensureFeed: feed not found anywhere:', feedId);
+    return false;
+  }
+
+  const { error } = await supabase
+    .from('feeds')
+    .upsert([feedToRow(feed, userId)], { onConflict: 'id,user_id' });
+  if (error) {
+    dispatchSyncError(`ensureFeed "${feed.name}"`, error);
+    return false;
+  }
+  return true;
+}
+
 // --------------- Debounce queue for item status updates ---------------
 
 let _debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let _pendingItemUpdates: Map<string, FeedItem> = new Map();
 let _currentUserId: string | null = null;
 
-function _flushItemUpdates() {
+async function _flushItemUpdates() {
   if (_pendingItemUpdates.size === 0 || !_currentUserId) return;
 
-  const rows = Array.from(_pendingItemUpdates.values()).map(item =>
-    itemToRow(item, _currentUserId!)
-  );
+  const userId = _currentUserId;
+  const items = Array.from(_pendingItemUpdates.values());
   _pendingItemUpdates.clear();
 
-  // Fire-and-forget upsert
-  supabase
+  // Ensure parent feeds exist in Supabase (FK constraint)
+  const feedIds = [...new Set(items.map(i => i.feedId))];
+  const failedFeedIds = new Set<string>();
+  for (const feedId of feedIds) {
+    const ok = await ensureFeedInSupabase(feedId, userId);
+    if (!ok) failedFeedIds.add(feedId);
+  }
+
+  const safeItems = failedFeedIds.size > 0
+    ? items.filter(i => !failedFeedIds.has(i.feedId))
+    : items;
+  if (safeItems.length === 0) return;
+
+  const rows = safeItems.map(item => itemToRow(item, userId));
+  const { error } = await supabase
     .from('feed_items')
-    .upsert(rows, { onConflict: 'id,user_id' })
-    .then(({ error }) => {
-      if (error) console.error('[sync] batch item upsert failed', error);
-    });
+    .upsert(rows, { onConflict: 'id,user_id' });
+  if (error) dispatchSyncError('batch item upsert', error);
 }
 
 // --------------- Public API -------------------------------------------
@@ -133,6 +188,7 @@ function _flushItemUpdates() {
 export const SyncService = {
   /** Call once after login to establish user context */
   setUserId(userId: string | null) {
+    console.log('[sync] setUserId:', userId);
     _currentUserId = userId;
     if (!userId) {
       _pendingItemUpdates.clear();
@@ -163,21 +219,45 @@ export const SyncService = {
       .eq('user_id', userId);
     if (itemsErr) throw itemsErr;
 
-    // ---- Merge feeds (last-write-wins on updated_at) ----
+    // ---- Merge feeds (last-write-wins on updated_at, match by id OR url) ----
     const localFeeds: Feed[] = loadLocal(STORAGE_KEYS.FEEDS, []);
     const feedMap = new Map<string, Feed>();
+    const urlToFeedId = new Map<string, string>(); // URL → canonical local ID
 
     for (const lf of localFeeds) {
       feedMap.set(lf.id, lf);
+      if (lf.url) urlToFeedId.set(lf.url, lf.id);
     }
     for (const row of remoteFeeds ?? []) {
       const rf = rowToFeed(row);
-      const existing = feedMap.get(rf.id);
-      if (!existing || (rf.updated_at && (!existing.updated_at || rf.updated_at > existing.updated_at))) {
-        feedMap.set(rf.id, { ...existing, ...rf, unreadCount: existing?.unreadCount ?? 0 });
+      // Match by id first, then fall back to URL (handles cross-platform ID mismatch)
+      const existingById = feedMap.get(rf.id);
+      const existingByUrl = rf.url ? (urlToFeedId.has(rf.url) ? feedMap.get(urlToFeedId.get(rf.url)!) : undefined) : undefined;
+      const existing = existingById ?? existingByUrl;
+
+      if (existing) {
+        if (rf.updated_at && (!existing.updated_at || rf.updated_at > existing.updated_at)) {
+          feedMap.set(existing.id, { ...existing, ...rf, id: existing.id, unreadCount: existing.unreadCount ?? 0 });
+        }
+      } else {
+        feedMap.set(rf.id, { ...rf, unreadCount: 0 });
+        if (rf.url) urlToFeedId.set(rf.url, rf.id);
       }
     }
     const mergedFeeds = Array.from(feedMap.values());
+
+    // Build remote-feed-id → local-feed-id map (for remapping item feedId)
+    const remoteFeedIdToLocal = new Map<string, string>(); // remote id → local id
+    const remoteFeedUrls = new Set<string>(); // URLs already present remotely
+    for (const row of remoteFeeds ?? []) {
+      const url = row.url as string;
+      const remoteId = row.id as string;
+      if (url) remoteFeedUrls.add(url);
+      const localId = urlToFeedId.get(url);
+      if (localId && localId !== remoteId) {
+        remoteFeedIdToLocal.set(remoteId, localId);
+      }
+    }
 
     // ---- Merge items (last-write-wins on updated_at, keep local content) ----
     const localItems: FeedItem[] = loadLocal(STORAGE_KEYS.ITEMS, []).map((item: FeedItem) => ({
@@ -186,17 +266,26 @@ export const SyncService = {
       isBookmarked: item.isBookmarked ?? false,
     }));
     const itemMap = new Map<string, FeedItem>();
+    const urlToId = new Map<string, string>(); // URL → canonical ID for dedup
 
     for (const li of localItems) {
       itemMap.set(li.id, li);
+      if (li.url) urlToId.set(li.url, li.id);
     }
     for (const row of remoteItems ?? []) {
       const ri = rowToItem(row);
-      const existing = itemMap.get(ri.id!);
+      // Remap feedId if the remote feed was matched to a local feed by URL
+      if (ri.feedId && remoteFeedIdToLocal.has(ri.feedId)) {
+        ri.feedId = remoteFeedIdToLocal.get(ri.feedId)!;
+      }
+      // Check if we already have this item by URL (handles cross-platform ID mismatch)
+      const existingIdByUrl = ri.url ? urlToId.get(ri.url) : undefined;
+      const existing = itemMap.get(ri.id!) ?? (existingIdByUrl ? itemMap.get(existingIdByUrl) : undefined);
+
       if (existing) {
         // Merge: keep local content, take remote flags if newer
         if (ri.updated_at && (!existing.updated_at || ri.updated_at > existing.updated_at)) {
-          itemMap.set(ri.id!, {
+          itemMap.set(existing.id, {
             ...existing,
             isRead: ri.isRead ?? existing.isRead,
             isStarred: ri.isStarred ?? existing.isStarred,
@@ -204,6 +293,7 @@ export const SyncService = {
             updated_at: ri.updated_at,
           });
         }
+        // Don't add the remote duplicate under its own ID
       } else {
         // Remote-only item: insert with empty content
         itemMap.set(ri.id!, {
@@ -213,6 +303,7 @@ export const SyncService = {
           comments: undefined,
           ...ri,
         } as FeedItem);
+        if (ri.url) urlToId.set(ri.url, ri.id!);
       }
     }
     const mergedItems = Array.from(itemMap.values());
@@ -221,21 +312,39 @@ export const SyncService = {
     saveLocal(STORAGE_KEYS.FEEDS, mergedFeeds);
     saveLocal(STORAGE_KEYS.ITEMS, mergedItems);
 
-    // ---- Push local-only feeds to remote ----
+    // ---- Push local-only feeds to remote (skip feeds already synced by URL) ----
     const remoteFeedIds = new Set((remoteFeeds ?? []).map((r: Record<string, unknown>) => r.id as string));
-    const feedsToPush = mergedFeeds.filter(f => !remoteFeedIds.has(f.id));
+    const feedsToPush = mergedFeeds.filter(f => !remoteFeedIds.has(f.id) && !remoteFeedUrls.has(f.url));
     if (feedsToPush.length > 0) {
-      const rows = feedsToPush.map(f => feedToRow(f, userId));
-      await supabase.from('feeds').upsert(rows, { onConflict: 'id,user_id' });
+      // Use insert for new feeds (they don't exist remotely yet)
+      for (const feed of feedsToPush) {
+        const row = feedToRow(feed, userId);
+        const { error } = await supabase.from('feeds').insert(row);
+        if (error) dispatchSyncError(`fullSync push feed "${feed.name}"`, error);
+      }
     }
 
     // ---- Push local-only items to remote (batch 500) ----
     const remoteItemIds = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.id as string));
-    const itemsToPush = mergedItems.filter(i => !remoteItemIds.has(i.id));
-    for (let i = 0; i < itemsToPush.length; i += 500) {
-      const batch = itemsToPush.slice(i, i + 500);
+    const remoteItemUrls = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.url as string).filter(Boolean));
+    const itemsToPush = mergedItems.filter(i => !remoteItemIds.has(i.id) && !(i.url && remoteItemUrls.has(i.url)));
+    // Ensure every referenced feed exists before inserting items
+    // Populate cache so ensureFeedInSupabase can find them
+    for (const f of mergedFeeds) _feedsCache.set(f.id, f);
+    const itemFeedIds = [...new Set(itemsToPush.map(i => i.feedId))];
+    const failedFeedIds = new Set<string>();
+    for (const fid of itemFeedIds) {
+      const ok = await ensureFeedInSupabase(fid, userId);
+      if (!ok) failedFeedIds.add(fid);
+    }
+    const safeItemsToPush = failedFeedIds.size > 0
+      ? itemsToPush.filter(i => !failedFeedIds.has(i.feedId))
+      : itemsToPush;
+    for (let i = 0; i < safeItemsToPush.length; i += 500) {
+      const batch = safeItemsToPush.slice(i, i + 500);
       const rows = batch.map(item => itemToRow(item, userId));
-      await supabase.from('feed_items').upsert(rows, { onConflict: 'id,user_id' });
+      const { error } = await supabase.from('feed_items').insert(rows);
+      if (error) dispatchSyncError('fullSync push items batch', error);
     }
 
     // ---- Notify useFeedStore to reload ----
@@ -244,10 +353,35 @@ export const SyncService = {
 
   /** Push a single feed to remote immediately */
   async pushFeed(feed: Feed): Promise<void> {
-    if (!isSupabaseConfigured || !_currentUserId) return;
-    const row = feedToRow(feed, _currentUserId);
-    const { error } = await supabase.from('feeds').upsert([row], { onConflict: 'id,user_id' });
-    if (error) console.error('[sync] pushFeed failed', error);
+    if (!isSupabaseConfigured) {
+      console.warn('[sync] pushFeed skipped: Supabase not configured');
+      return;
+    }
+    if (!_currentUserId) {
+      console.warn('[sync] pushFeed skipped: no userId set');
+      return;
+    }
+    // Cache feed data immediately so pushNewItems can find it
+    _feedsCache.set(feed.id, feed);
+
+    const doInsert = async () => {
+      const row = feedToRow(feed, _currentUserId!);
+      console.log('[sync] pushFeed inserting:', feed.name, feed.source, 'userId:', _currentUserId);
+      const { error } = await supabase
+        .from('feeds')
+        .upsert([row], { onConflict: 'id,user_id' });
+      if (error) {
+        dispatchSyncError('pushFeed', error);
+      } else {
+        console.log('[sync] pushFeed OK:', feed.name);
+      }
+    };
+
+    // Track the promise so pushNewItems can await it
+    const promise = doInsert();
+    _pushFeedPromises.set(feed.id, promise);
+    await promise;
+    _pushFeedPromises.delete(feed.id);
   },
 
   /** Delete a feed from remote immediately */
@@ -258,7 +392,7 @@ export const SyncService = {
       .delete()
       .eq('id', feedId)
       .eq('user_id', _currentUserId);
-    if (error) console.error('[sync] deleteFeed failed', error);
+    if (error) dispatchSyncError('deleteFeed', error);
   },
 
   /** Queue an item status change (debounced 2s) */
@@ -274,13 +408,26 @@ export const SyncService = {
     if (!isSupabaseConfigured || !_currentUserId) return;
     const userId = _currentUserId;
 
-    for (let i = 0; i < items.length; i += 500) {
-      const batch = items.slice(i, i + 500);
+    // Ensure parent feeds exist in Supabase (awaits in-flight pushFeed + uses cache)
+    const feedIds = [...new Set(items.map(i => i.feedId))];
+    const failedFeedIds = new Set<string>();
+    for (const feedId of feedIds) {
+      const ok = await ensureFeedInSupabase(feedId, userId);
+      if (!ok) failedFeedIds.add(feedId);
+    }
+
+    // Only push items whose parent feed is confirmed in Supabase
+    const safeItems = failedFeedIds.size > 0
+      ? items.filter(i => !failedFeedIds.has(i.feedId))
+      : items;
+
+    for (let i = 0; i < safeItems.length; i += 500) {
+      const batch = safeItems.slice(i, i + 500);
       const rows = batch.map(item => itemToRow(item, userId));
       const { error } = await supabase
         .from('feed_items')
         .upsert(rows, { onConflict: 'id,user_id' });
-      if (error) console.error('[sync] pushNewItems batch failed', error);
+      if (error) dispatchSyncError('pushNewItems batch', error);
     }
   },
 };

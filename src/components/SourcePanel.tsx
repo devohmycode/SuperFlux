@@ -12,6 +12,8 @@ import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
 import { PRO_LIMITS } from "../services/licenseService";
 import { isRSSHubUrl } from "../services/rsshubService";
+import { NoteSourceList } from "./NoteSourceList";
+import type { Note } from "./NotePanel";
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -42,6 +44,23 @@ interface SourcePanelProps {
   onClose?: () => void;
   brandMode: 'flux' | 'note' | 'bookmark';
   onToggleBrand: () => void;
+  onSyncIntervalChange?: (interval: number) => void;
+  onShowSysInfoChange?: (show: boolean) => void;
+  showSysInfo?: boolean;
+  onPinsChange?: (pins: PinEntry[]) => void;
+  // Note mode props
+  notes?: Note[];
+  noteFolders?: string[];
+  selectedNoteId?: string | null;
+  selectedNoteFolder?: string | null;
+  onSelectNote?: (noteId: string) => void;
+  onSelectNoteFolder?: (folder: string | null) => void;
+  onAddNote?: () => void;
+  onCreateNoteFolder?: (name: string) => void;
+  onRenameNoteFolder?: (oldName: string, newName: string) => void;
+  onDeleteNoteFolder?: (name: string) => void;
+  onMoveNoteToFolder?: (noteId: string, folder: string | undefined) => void;
+  onDeleteNote?: (noteId: string) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -90,6 +109,29 @@ function buildFolderTree(paths: string[]): FolderNode[] {
   return root;
 }
 
+// ── Pinned feeds/folders ──
+const PINS_KEY = 'superflux_pinned';
+
+export type PinEntry =
+  | { kind: 'feed'; feedId: string; label: string; icon: string }
+  | { kind: 'folder'; categoryId: string; folderPath: string; label: string };
+
+export function getPinnedItems(): PinEntry[] {
+  try {
+    const v = localStorage.getItem(PINS_KEY);
+    if (v) return JSON.parse(v);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function savePinnedItems(pins: PinEntry[]) {
+  localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+}
+
+function pinKey(pin: PinEntry): string {
+  return pin.kind === 'feed' ? `feed::${pin.feedId}` : `folder::${pin.categoryId}::${pin.folderPath}`;
+}
+
 // Indentation constants (px per nesting depth)
 const INDENT_STEP = 14;
 const FOLDER_BASE_INDENT = 24;
@@ -124,6 +166,22 @@ export function SourcePanel({
   onClose,
   brandMode,
   onToggleBrand,
+  onSyncIntervalChange,
+  onShowSysInfoChange,
+  showSysInfo,
+  onPinsChange,
+  notes = [],
+  noteFolders = [],
+  selectedNoteId = null,
+  selectedNoteFolder = null,
+  onSelectNote,
+  onSelectNoteFolder,
+  onAddNote,
+  onCreateNoteFolder,
+  onRenameNoteFolder,
+  onDeleteNoteFolder,
+  onMoveNoteToFolder,
+  onDeleteNote,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
 
@@ -140,6 +198,7 @@ export function SourcePanel({
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [moveSubmenuFeedId, setMoveSubmenuFeedId] = useState<string | null>(null);
+  const [pinnedItems, setPinnedItems] = useState<PinEntry[]>(getPinnedItems);
 
   // Inline inputs (parentPath: where to create; oldPath: which folder to rename)
   const [newFolderInput, setNewFolderInput] = useState<{ categoryId: string; value: string; parentPath?: string } | null>(null);
@@ -186,6 +245,21 @@ export function SourcePanel({
     e.stopPropagation();
     setContextMenu({ kind: 'folder', x: e.clientX, y: e.clientY, categoryId, folderPath });
   }, []);
+
+  const togglePin = useCallback((entry: PinEntry) => {
+    setPinnedItems(prev => {
+      const key = pinKey(entry);
+      const exists = prev.some(p => pinKey(p) === key);
+      const next = exists ? prev.filter(p => pinKey(p) !== key) : [...prev, entry];
+      savePinnedItems(next);
+      onPinsChange?.(next);
+      return next;
+    });
+  }, [onPinsChange]);
+
+  const isPinned = useCallback((entry: PinEntry) => {
+    return pinnedItems.some(p => pinKey(p) === pinKey(entry));
+  }, [pinnedItems]);
 
   // Close all context menus on click/escape
   useEffect(() => {
@@ -467,7 +541,24 @@ export function SourcePanel({
       </div>
 
       <div className="source-panel-content">
-        {brandMode !== 'flux' ? (
+        {brandMode === 'note' ? (
+          onSelectNote && onSelectNoteFolder && onAddNote && onCreateNoteFolder && onRenameNoteFolder && onDeleteNoteFolder && onMoveNoteToFolder && onDeleteNote ? (
+            <NoteSourceList
+              notes={notes}
+              folders={noteFolders}
+              selectedNoteId={selectedNoteId}
+              selectedFolder={selectedNoteFolder}
+              onSelectNote={onSelectNote}
+              onSelectFolder={onSelectNoteFolder}
+              onAddNote={onAddNote}
+              onCreateFolder={onCreateNoteFolder}
+              onRenameFolder={onRenameNoteFolder}
+              onDeleteFolder={onDeleteNoteFolder}
+              onMoveNoteToFolder={onMoveNoteToFolder}
+              onDeleteNote={onDeleteNote}
+            />
+          ) : <div className="panel-empty-note" />
+        ) : brandMode === 'bookmark' ? (
           <div className="panel-empty-note" />
         ) : (
         <>
@@ -648,6 +739,9 @@ export function SourcePanel({
         onClose={() => setIsSettingsOpen(false)}
         onImportOpml={onImportOpml}
         feedCount={totalFeeds}
+        onSyncIntervalChange={onSyncIntervalChange}
+        onShowSysInfoChange={onShowSysInfoChange}
+        showSysInfo={showSysInfo}
       />
 
       <StatsModal
@@ -807,6 +901,17 @@ export function SourcePanel({
             Renommer
           </button>
           <button
+            className="feed-context-menu-item"
+            onClick={() => {
+              const folderName = contextMenu.folderPath.split('/').pop()!;
+              togglePin({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: folderName });
+              setContextMenu(null);
+            }}
+          >
+            <span className="feed-context-menu-icon">{isPinned({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: '' }) ? '✦' : '☆'}</span>
+            {isPinned({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: '' }) ? 'Désépingler' : 'Épingler en haut'}
+          </button>
+          <button
             className="feed-context-menu-item feed-context-menu-item--danger"
             onClick={() => {
               onDeleteFolder(contextMenu.categoryId, contextMenu.folderPath);
@@ -831,6 +936,17 @@ export function SourcePanel({
             style={{ top: contextMenu.y, left: contextMenu.x }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button
+              className="feed-context-menu-item"
+              onClick={() => {
+                const feed = contextMenu.feed;
+                togglePin({ kind: 'feed', feedId: feed.id, label: feed.name, icon: feed.icon || sourceIcons[feed.source] || '◇' });
+                setContextMenu(null);
+              }}
+            >
+              <span className="feed-context-menu-icon">{isPinned({ kind: 'feed', feedId: contextMenu.feed.id, label: '', icon: '' }) ? '✦' : '☆'}</span>
+              {isPinned({ kind: 'feed', feedId: contextMenu.feed.id, label: '', icon: '' }) ? 'Désépingler' : 'Épingler en haut'}
+            </button>
             <button
               className="feed-context-menu-item"
               onClick={() => {

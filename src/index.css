@@ -275,6 +275,13 @@ body {
     letter-spacing: 0.02em;
 }
 
+.titlebar-sysinfo {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+}
+
 .titlebar-controls {
     display: flex;
     height: 100%;
@@ -316,6 +323,20 @@ body {
 .titlebar-btn-pin.active:hover {
     background: var(--accent-glow);
     color: var(--accent-text);
+}
+
+.titlebar-btn-sync.syncing svg {
+    animation: spin 1s linear infinite;
+}
+
+.titlebar-btn-sync:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* Collapsed / bar mode */
@@ -383,11 +404,129 @@ body {
     border: 1px solid var(--border-default);
 }
 
+.titlebar-pins {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding-left: 8px;
+    border-left: 1px solid var(--border-subtle);
+}
+
+.titlebar-pin {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-secondary);
+    transition: background var(--duration-fast) var(--ease-out),
+                color var(--duration-fast) var(--ease-out);
+    white-space: nowrap;
+}
+
+.titlebar-pin:hover {
+    background: var(--bg-active);
+    color: var(--text-primary);
+}
+
+.titlebar-pin-icon {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.titlebar-pin-label {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.titlebar-pin-badge {
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    border-radius: 7px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+}
+
 .titlebar-info {
     display: flex;
     align-items: center;
     gap: var(--space-lg);
     margin-right: var(--space-sm);
+}
+
+.titlebar-monitor {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    overflow: hidden;
+    font-size: 8px;
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.titlebar-monitor-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: var(--accent);
+    opacity: 0.25;
+    transition: width 1s ease-out;
+    border-radius: 4px;
+}
+
+.titlebar-monitor--mid .titlebar-monitor-bar {
+    background: #f59e0b;
+    opacity: 0.35;
+}
+
+.titlebar-monitor--high .titlebar-monitor-bar {
+    background: #ef4444;
+    opacity: 0.4;
+}
+
+.titlebar-monitor-text {
+    position: relative;
+    z-index: 1;
+    color: var(--text-secondary);
+}
+
+.titlebar-monitor--high .titlebar-monitor-text {
+    color: #ef4444;
+}
+
+.titlebar-net {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    margin-right: 6px;
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--font-mono, monospace);
+    color: var(--text-tertiary);
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.titlebar-net-row:first-child {
+    color: var(--accent);
 }
 
 .titlebar-weather {
@@ -448,6 +587,745 @@ body {
 .panel-empty-note {
     width: 100%;
     height: 100%;
+}
+
+/* ═══════════════════════════════════════════════
+   SUPERNOTE — Note Panel & Cards
+   ═══════════════════════════════════════════════ */
+
+.note-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-root);
+}
+
+.note-panel-header {
+    padding: var(--space-lg) var(--space-lg) var(--space-md);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.note-panel-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-md);
+}
+
+.note-panel-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.note-panel-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent-dim);
+    letter-spacing: 0.02em;
+}
+
+.note-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.note-panel-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-lg);
+}
+
+/* 2-column staggered grid */
+.note-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-xl);
+}
+
+/* Note card with hover expand */
+.note-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: var(--space-lg);
+    height: 150px;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    background: var(--bg-surface);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: all 0.4s cubic-bezier(0.34, 1.7, 0.64, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.note-card:nth-child(even) {
+    margin-top: 40px;
+}
+
+.note-card:hover {
+    height: 260px;
+    transform: translateY(-5px);
+    border-color: var(--border-strong);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+.note-card.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 16px var(--accent-glow);
+}
+
+.note-card-number {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.25;
+    line-height: 1;
+    margin-bottom: var(--space-xs);
+}
+
+.note-card-title {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.note-card-date {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-sm);
+}
+
+.note-card-content {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    opacity: 0;
+    max-height: 0;
+    transition: opacity 0.35s ease, max-height 0.35s ease;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+}
+
+.note-card:hover .note-card-content {
+    opacity: 1;
+    max-height: 120px;
+}
+
+.note-card-actions {
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.note-card:hover .note-card-actions {
+    opacity: 1;
+}
+
+.note-card-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+}
+
+.note-card-delete:hover {
+    background: var(--bg-hover);
+    color: var(--red);
+}
+
+/* Empty state */
+.note-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3xl) var(--space-xl);
+    text-align: center;
+    gap: var(--space-sm);
+    height: 100%;
+}
+
+.note-empty-icon {
+    font-size: 32px;
+    color: var(--accent);
+    opacity: 0.3;
+    margin-bottom: var(--space-sm);
+}
+
+.note-empty-text {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.note-empty-hint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    max-width: 220px;
+    line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════
+   SUPERNOTE — Source List (panel 1)
+   ═══════════════════════════════════════════════ */
+
+.nsrc {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-sm) 0;
+}
+
+.nsrc-add-folder-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    padding: 6px var(--space-lg);
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: color var(--duration-fast) var(--ease-out);
+}
+
+.nsrc-add-folder-btn:hover {
+    color: var(--accent);
+}
+
+.nsrc-add-folder-icon {
+    font-size: 14px;
+    font-weight: 600;
+    width: 16px;
+    text-align: center;
+}
+
+.nsrc-add-folder-label {
+    font-weight: 500;
+}
+
+.nsrc-folder-input-row {
+    padding: 2px var(--space-lg);
+    overflow: hidden;
+}
+
+.nsrc-folder-input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-family: var(--font-body);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.nsrc-folder-input:focus {
+    border-color: var(--accent);
+}
+
+.nsrc-folder-input.inline {
+    padding: 2px 6px;
+    font-size: 12px;
+    flex: 1;
+}
+
+.nsrc-root-zone {
+    display: flex;
+    flex-direction: column;
+}
+
+.nsrc-note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 5px var(--space-lg) 5px calc(var(--space-lg) + 8px);
+    margin: 2px var(--space-sm);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+    border-radius: 6px;
+    user-select: none;
+    background: var(--bg-surface);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.nsrc-note:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.nsrc-note.active {
+    background: var(--accent-glow);
+    color: var(--accent-text);
+}
+
+
+.nsrc-note-icon {
+    font-size: 11px;
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+.nsrc-note-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.nsrc-folder {
+    display: flex;
+    flex-direction: column;
+}
+
+.nsrc-folder-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 6px var(--space-lg);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all var(--duration-fast) var(--ease-out);
+    border-radius: 4px;
+    border: 1px solid transparent;
+}
+
+.nsrc-folder-header:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.nsrc-folder-header.active {
+    background: var(--accent-glow);
+    color: var(--accent-text);
+}
+
+
+
+.nsrc-folder-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.nsrc-folder-name {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nsrc-folder-count {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    background: var(--bg-elevated);
+    padding: 1px 6px;
+    border-radius: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.nsrc-folder-children {
+    overflow: hidden;
+}
+
+.nsrc-folder-children .nsrc-note {
+    padding-left: calc(var(--space-lg) + 20px);
+}
+
+.nsrc-folder-empty {
+    padding: 4px calc(var(--space-lg) + 20px);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+/* ── Sticky Board (panel 2 – board view) ── */
+
+.sticky-board-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sticky-board-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px var(--space-md);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.sticky-color-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sticky-color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, border-color 0.15s;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.sticky-color-swatch:hover {
+    transform: scale(1.15);
+}
+
+.sticky-color-swatch.active {
+    transform: scale(1.15);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+.sticky-color-check {
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(0,0,0,0.4);
+}
+
+.sticky-add-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.sticky-add-btn:hover {
+    filter: brightness(1.1);
+}
+
+.sticky-board {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-image: radial-gradient(circle at 1px 1px, var(--border-subtle) 1px, transparent 0);
+    background-size: 28px 28px;
+}
+
+.sticky-board-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: var(--text-tertiary);
+}
+
+.sticky-board-empty-icon {
+    font-size: 32px;
+    opacity: 0.4;
+}
+
+.sticky-board-empty p {
+    margin: 0;
+    font-size: 13px;
+}
+
+.sticky-board-empty-hint {
+    font-size: 11px !important;
+    opacity: 0.6;
+}
+
+/* ── Single sticky note ── */
+
+.sticky-note {
+    position: absolute;
+    width: 200px;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 2px;
+    user-select: none;
+    touch-action: none;
+    cursor: grab;
+}
+
+.sticky-note--dragging {
+    cursor: grabbing;
+    z-index: 9999 !important;
+}
+
+.sticky-note--selected {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.sticky-note:not(.sticky-note--dragging):hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18) !important;
+}
+
+.sticky-note-tape {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    width: 56px;
+    height: 20px;
+    border-radius: 2px;
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.sticky-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 10px 2px;
+}
+
+.sticky-note-grip {
+    font-size: 12px;
+    color: rgba(0,0,0,0.2);
+    cursor: grab;
+    letter-spacing: 1px;
+}
+
+.sticky-note-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sticky-note-btn {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: rgba(0,0,0,0.35);
+    transition: background 0.15s, color 0.15s;
+}
+
+.sticky-note-btn:hover {
+    background: rgba(0,0,0,0.08);
+    color: rgba(0,0,0,0.7);
+}
+
+.sticky-note-btn--save {
+    color: #15803d;
+    font-weight: 700;
+}
+
+.sticky-note-btn--save:hover {
+    background: rgba(21,128,61,0.1);
+}
+
+.sticky-note-btn--delete:hover {
+    background: rgba(220,38,38,0.1);
+    color: #dc2626;
+}
+
+.sticky-note-title {
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(0,0,0,0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sticky-note-content {
+    flex: 1;
+    padding: 6px 12px 12px;
+}
+
+.sticky-note-text {
+    font-family: 'Caveat', cursive;
+    font-size: 18px;
+    line-height: 1.4;
+    color: rgba(0,0,0,0.8);
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: grab;
+    margin: 0;
+}
+
+.sticky-note-textarea {
+    width: 100%;
+    height: 110px;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-family: 'Caveat', cursive;
+    font-size: 18px;
+    line-height: 1.4;
+    color: rgba(0,0,0,0.8);
+}
+
+.sticky-note-textarea::placeholder {
+    color: rgba(0,0,0,0.25);
+}
+
+.sticky-note-corner {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.06) 50%);
+    pointer-events: none;
+}
+
+/* ── Note Editor (3rd panel) ── */
+
+.note-editor {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-subtle);
+}
+
+.note-editor-header {
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.note-editor-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.note-editor-title {
+    flex: 1;
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+    letter-spacing: -0.01em;
+}
+
+.note-editor-title::placeholder {
+    color: var(--text-tertiary);
+}
+
+.note-editor-date {
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+
+.note-editor-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-lg);
+}
+
+.note-editor-content {
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 0;
+}
+
+.note-editor-content::placeholder {
+    color: var(--text-tertiary);
+}
+
+.note-editor-empty {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-subtle);
+    gap: var(--space-sm);
+}
+
+/* Dark / Sepia shadow overrides */
+.dark .note-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.dark .note-card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.sepia .note-card {
+    box-shadow: 0 2px 8px rgba(80, 60, 30, 0.06);
+}
+
+.sepia .note-card:hover {
+    box-shadow: 0 8px 24px rgba(80, 60, 30, 0.12);
 }
 
 .panel {

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { fetchViaBackend } from '../lib/tauriFetch';
+import type { PinEntry } from './SourcePanel';
+import type { FeedCategory, FeedSource } from '../types';
 
 const appWindow = getCurrentWindow();
 
@@ -11,6 +13,12 @@ interface TitleBarProps {
   unreadCount?: number;
   favoritesCount?: number;
   readLaterCount?: number;
+  pinnedItems?: PinEntry[];
+  categories?: FeedCategory[];
+  onSelectFeed?: (feedId: string, source: FeedSource) => void;
+  onSync?: () => void;
+  isSyncing?: boolean;
+  showSysInfo?: boolean;
 }
 
 interface WeatherData {
@@ -49,6 +57,11 @@ function getWeatherIcon(code: number): string {
   return weatherIcons[code] ?? '\u2600';
 }
 
+function formatSpeed(kbps: number): string {
+  if (kbps >= 1024) return `${(kbps / 1024).toFixed(1)} MB/s`;
+  return `${Math.round(kbps)} KB/s`;
+}
+
 function formatTime(date: Date): string {
   return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
@@ -57,10 +70,13 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favoritesCount = 0, readLaterCount = 0 }: TitleBarProps) {
+export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favoritesCount = 0, readLaterCount = 0, pinnedItems = [], categories = [], onSelectFeed, onSync, isSyncing = false, showSysInfo = true }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [now, setNow] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [cpuUsage, setCpuUsage] = useState<number | null>(null);
+  const [memUsage, setMemUsage] = useState<{ used_gb: number; total_gb: number; percent: number } | null>(null);
+  const [netSpeed, setNetSpeed] = useState<{ download_kbps: number; upload_kbps: number } | null>(null);
   const [alwaysOnTop, setAlwaysOnTop] = useState(() => {
     try { return localStorage.getItem('superflux_always_on_top') === 'true'; }
     catch { return false; }
@@ -92,6 +108,31 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
     const interval = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(interval);
   }, []);
+
+  // System monitors: poll every 2s when collapsed and sysinfo visible
+  useEffect(() => {
+    if (!isCollapsed || !showSysInfo) {
+      setCpuUsage(null);
+      setMemUsage(null);
+      setNetSpeed(null);
+      return;
+    }
+    let cancelled = false;
+    const poll = () => {
+      invoke<number>('get_cpu_usage')
+        .then(v => { if (!cancelled) setCpuUsage(Math.round(v)); })
+        .catch(() => {});
+      invoke<{ used_gb: number; total_gb: number; percent: number }>('get_memory_usage')
+        .then(v => { if (!cancelled) setMemUsage(v); })
+        .catch(() => {});
+      invoke<{ download_kbps: number; upload_kbps: number }>('get_net_speed')
+        .then(v => { if (!cancelled) setNetSpeed(v); })
+        .catch(() => {});
+    };
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isCollapsed, showSysInfo]);
 
   // Weather: fetch on mount + every 15 minutes
   useEffect(() => {
@@ -162,6 +203,50 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
             )}
           </div>
         )}
+        {isCollapsed && pinnedItems.length > 0 && (
+          <div className="titlebar-pins">
+            {pinnedItems.map(pin => {
+              let count = 0;
+              let icon = '◇';
+              let label = '';
+              if (pin.kind === 'feed') {
+                for (const cat of categories) {
+                  const feed = cat.feeds.find(f => f.id === pin.feedId);
+                  if (feed) { count = feed.unreadCount; icon = pin.icon; label = pin.label; break; }
+                }
+              } else {
+                const cat = categories.find(c => c.id === pin.categoryId);
+                if (cat) {
+                  count = cat.feeds
+                    .filter(f => f.folder === pin.folderPath || f.folder?.startsWith(pin.folderPath + '/'))
+                    .reduce((s, f) => s + f.unreadCount, 0);
+                  icon = '📁';
+                  label = pin.label;
+                }
+              }
+              const key = pin.kind === 'feed' ? `feed::${pin.feedId}` : `folder::${pin.categoryId}::${pin.folderPath}`;
+              return (
+                <button
+                  key={key}
+                  className="titlebar-pin"
+                  title={label}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (pin.kind === 'feed' && onSelectFeed) {
+                      const cat = categories.find(c => c.feeds.some(f => f.id === pin.feedId));
+                      const feed = cat?.feeds.find(f => f.id === pin.feedId);
+                      if (feed) onSelectFeed(feed.id, feed.source);
+                    }
+                  }}
+                >
+                  <span className="titlebar-pin-icon">{icon}</span>
+                  <span className="titlebar-pin-label">{label}</span>
+                  {count > 0 && <span className="titlebar-pin-badge">{count}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       {isCollapsed && (
         <div className="titlebar-info" data-tauri-drag-region>
@@ -174,6 +259,28 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
             <span className="titlebar-time">{formatTime(now)}</span>
             <span className="titlebar-date">{formatDate(now)}</span>
           </span>
+        </div>
+      )}
+      {isCollapsed && showSysInfo && (
+        <div className="titlebar-sysinfo" data-tauri-drag-region>
+          {cpuUsage !== null && (
+            <span className={`titlebar-monitor ${cpuUsage > 80 ? 'titlebar-monitor--high' : cpuUsage > 50 ? 'titlebar-monitor--mid' : ''}`} data-tauri-drag-region title="CPU">
+              <span className="titlebar-monitor-bar" style={{ width: `${cpuUsage}%` }} />
+              <span className="titlebar-monitor-text">CPU {cpuUsage}%</span>
+            </span>
+          )}
+          {memUsage !== null && (
+            <span className={`titlebar-monitor ${memUsage.percent > 85 ? 'titlebar-monitor--high' : memUsage.percent > 65 ? 'titlebar-monitor--mid' : ''}`} data-tauri-drag-region title={`RAM ${memUsage.used_gb} / ${memUsage.total_gb} Go`}>
+              <span className="titlebar-monitor-bar" style={{ width: `${memUsage.percent}%` }} />
+              <span className="titlebar-monitor-text">RAM {memUsage.used_gb}G</span>
+            </span>
+          )}
+          {netSpeed !== null && (
+            <span className="titlebar-net" data-tauri-drag-region title="Réseau">
+              <span className="titlebar-net-row">↓ {formatSpeed(netSpeed.download_kbps)}</span>
+              <span className="titlebar-net-row">↑ {formatSpeed(netSpeed.upload_kbps)}</span>
+            </span>
+          )}
         </div>
       )}
       <div className="titlebar-controls">
@@ -206,6 +313,19 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
               )}
             </button>
           </>
+        )}
+        {isCollapsed && onSync && (
+          <button
+            className={`titlebar-btn titlebar-btn-sync ${isSyncing ? 'syncing' : ''}`}
+            onClick={onSync}
+            disabled={isSyncing}
+            title={isSyncing ? 'Synchronisation en cours…' : 'Forcer la synchronisation'}
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11">
+              <path d="M5.5 1 A4.5 4.5 0 1 1 1 5.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <polyline points="5.5,0 5.5,2.5 3,1" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         )}
         {isCollapsed && (
           <button

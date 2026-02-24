@@ -38,6 +38,7 @@ interface FeedPanelProps {
   showReadLater?: boolean;
   onSelectItem: (item: FeedItem) => void;
   onMarkAllAsRead: () => void;
+  onMarkAllAsUnread: () => void;
   onToggleRead: (itemId: string) => void;
   onToggleStar: (itemId: string) => void;
   onToggleBookmark: (itemId: string) => void;
@@ -111,7 +112,7 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
   return null;
 }
 
-export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onClose }: FeedPanelProps) {
+export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onClose }: FeedPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
@@ -350,10 +351,16 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
           </button>
           <button
             className="feed-action-btn"
-            title="Tout marquer comme lu"
-            onClick={onMarkAllAsRead}
+            title={unreadCount > 0 ? 'Tout marquer comme lu' : 'Tout marquer comme non lu'}
+            onClick={unreadCount > 0 ? onMarkAllAsRead : onMarkAllAsUnread}
           >
-            ✓
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              {unreadCount > 0 ? (
+                <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              ) : (
+                <circle cx="6" cy="6" r="4.5" fill="currentColor" stroke="currentColor" strokeWidth="1.4" />
+              )}
+            </svg>
           </button>
           <button
             className={`feed-action-btn ${viewMode === 'cards' ? 'active' : ''}`}

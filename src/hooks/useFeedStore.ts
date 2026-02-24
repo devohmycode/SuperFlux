@@ -130,6 +130,7 @@ export interface FeedStore {
   syncAll: () => Promise<void>;
   markAsRead: (itemId: string) => void;
   markAllAsRead: (feedId?: string) => void;
+  markAllAsUnread: (feedId?: string) => void;
   toggleRead: (itemId: string) => void;
   toggleStar: (itemId: string) => void;
   toggleBookmark: (itemId: string) => void;
@@ -377,6 +378,24 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     });
   }, []);
 
+  // Mark all as unread
+  const markAllAsUnread = useCallback((feedId?: string) => {
+    let changedItems: FeedItem[] = [];
+    setItems(prev => {
+      const now = new Date().toISOString();
+      const next = prev.map(item =>
+        (!feedId || item.feedId === feedId) && item.isRead
+          ? { ...item, isRead: false, updated_at: now }
+          : item
+      );
+      changedItems = next.filter((item, i) => item !== prev[i]);
+      return next;
+    });
+    queueMicrotask(() => {
+      if (changedItems.length > 0) cbRef.current?.onItemsChanged?.(changedItems);
+    });
+  }, []);
+
   // Toggle read/unread
   const toggleRead = useCallback((itemId: string) => {
     updateItem(itemId, item => ({ ...item, isRead: !item.isRead, updated_at: new Date().toISOString() }));
@@ -564,6 +583,7 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     syncAll,
     markAsRead,
     markAllAsRead,
+    markAllAsUnread,
     toggleRead,
     toggleStar,
     toggleBookmark,

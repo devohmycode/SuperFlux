@@ -8,5 +8,7 @@ export const isSupabaseConfigured =
 
 // Create a real client only when configured; otherwise a dummy that will never be used.
 export const supabase: SupabaseClient = isSupabaseConfigured
-  ? createClient(supabaseUrl!, supabaseAnonKey!)
+  ? createClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: { flowType: 'pkce' },
+    })
   : (null as unknown as SupabaseClient);
