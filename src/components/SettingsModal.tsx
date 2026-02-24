@@ -14,11 +14,31 @@ import { usePro } from '../contexts/ProContext';
 import { PRO_LIMITS } from '../services/licenseService';
 import { getRSSHubInstance, setRSSHubInstance as setRSSHubInstanceConfig } from '../services/rsshubService';
 
+const SYNC_INTERVAL_KEY = 'superflux_sync_interval';
+const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000;
+
+const SYNC_OPTIONS = [
+  { value: 1 * 60 * 1000, label: '1 minute' },
+  { value: 3 * 60 * 1000, label: '3 minutes' },
+  { value: 5 * 60 * 1000, label: '5 minutes' },
+  { value: 10 * 60 * 1000, label: '10 minutes' },
+  { value: 15 * 60 * 1000, label: '15 minutes' },
+  { value: 30 * 60 * 1000, label: '30 minutes' },
+  { value: 45 * 60 * 1000, label: '45 minutes' },
+  { value: 60 * 60 * 1000, label: '1 heure' },
+  { value: 3 * 60 * 60 * 1000, label: '3 heures' },
+  { value: 6 * 60 * 60 * 1000, label: '6 heures' },
+  { value: 12 * 60 * 60 * 1000, label: '12 heures' },
+] as const;
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportOpml: (feeds: { url: string; name: string; source: FeedSource }[]) => number;
   feedCount?: number;
+  onSyncIntervalChange?: (interval: number) => void;
+  onShowSysInfoChange?: (show: boolean) => void;
+  showSysInfo?: boolean;
 }
 
 interface OpmlFeed {
@@ -113,7 +133,7 @@ function parseOpml(xmlString: string): OpmlFeed[] {
   return feeds;
 }
 
-export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, onSyncIntervalChange, onShowSysInfoChange, showSysInfo = true }: SettingsModalProps) {
   const { user, signOut, isConfigured } = useAuth();
   const { isPro, deactivateLicense, showUpgradeModal } = usePro();
 
@@ -141,6 +161,15 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: 
 
   // ── Translation state ──
   const [translationLang, setTranslationLang] = useState(() => getTranslationConfig().targetLanguage);
+
+  // ── Sync interval state ──
+  const [syncIntervalMs, setSyncIntervalMs] = useState(() => {
+    try {
+      const v = localStorage.getItem(SYNC_INTERVAL_KEY);
+      if (v) return Number(v);
+    } catch { /* ignore */ }
+    return DEFAULT_SYNC_INTERVAL;
+  });
 
   // ── RSSHub state ──
   const [rsshubInstance, setRsshubInstance] = useState(getRSSHubInstance);
@@ -530,6 +559,46 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0 }: 
                     </div>
                   </>
                 )}
+
+                <label className="settings-label" style={{ marginTop: 12 }}>Infos système dans la barre de titre</label>
+                <div className="settings-format-toggle">
+                  <button
+                    className={`format-option ${showSysInfo ? 'active' : ''}`}
+                    onClick={() => onShowSysInfoChange?.(true)}
+                  >
+                    <span className="format-option-label">Activé</span>
+                  </button>
+                  <button
+                    className={`format-option ${!showSysInfo ? 'active' : ''}`}
+                    onClick={() => onShowSysInfoChange?.(false)}
+                  >
+                    <span className="format-option-label">Désactivé</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Synchronisation ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Synchronisation</h3>
+                <p className="settings-section-desc">
+                  Fréquence de mise à jour automatique de tous les flux.
+                </p>
+
+                <label className="settings-label">Intervalle de synchronisation</label>
+                <select
+                  className="provider-input"
+                  value={syncIntervalMs}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setSyncIntervalMs(v);
+                    localStorage.setItem(SYNC_INTERVAL_KEY, String(v));
+                    onSyncIntervalChange?.(v);
+                  }}
+                >
+                  {SYNC_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* ── RSSHub ── */}

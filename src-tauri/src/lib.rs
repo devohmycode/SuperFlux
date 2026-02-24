@@ -262,6 +262,88 @@ async fn http_request(
 }
 
 #[tauri::command]
+fn get_cpu_usage() -> f32 {
+    use sysinfo::System;
+    static SYS: OnceLock<Mutex<System>> = OnceLock::new();
+    let mtx = SYS.get_or_init(|| {
+        let mut sys = System::new();
+        sys.refresh_cpu_usage();
+        Mutex::new(sys)
+    });
+    let mut sys = mtx.lock().unwrap();
+    sys.refresh_cpu_usage();
+    sys.global_cpu_usage()
+}
+
+#[derive(Serialize)]
+struct MemoryInfo {
+    used_gb: f64,
+    total_gb: f64,
+    percent: f32,
+}
+
+#[tauri::command]
+fn get_memory_usage() -> MemoryInfo {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_memory();
+    let total = sys.total_memory() as f64;
+    let used = sys.used_memory() as f64;
+    let gb = 1_073_741_824.0; // 1 GiB
+    MemoryInfo {
+        used_gb: (used / gb * 10.0).round() / 10.0,
+        total_gb: (total / gb * 10.0).round() / 10.0,
+        percent: if total > 0.0 { (used / total * 100.0) as f32 } else { 0.0 },
+    }
+}
+
+#[derive(Serialize)]
+struct NetSpeed {
+    download_kbps: f64,
+    upload_kbps: f64,
+}
+
+#[tauri::command]
+fn get_net_speed() -> NetSpeed {
+    use sysinfo::Networks;
+    use std::time::Instant;
+
+    static NET: OnceLock<Mutex<(Networks, Instant, u64, u64)>> = OnceLock::new();
+    let mtx = NET.get_or_init(|| {
+        let mut nets = Networks::new_with_refreshed_list();
+        nets.refresh();
+        let (rx, tx) = nets.iter().fold((0u64, 0u64), |(r, t), (_name, data)| {
+            (r + data.total_received(), t + data.total_transmitted())
+        });
+        Mutex::new((nets, Instant::now(), rx, tx))
+    });
+
+    let mut guard = mtx.lock().unwrap();
+    let (ref mut nets, ref mut last_time, ref mut last_rx, ref mut last_tx) = *guard;
+
+    nets.refresh();
+    let now = Instant::now();
+    let elapsed = now.duration_since(*last_time);
+    let secs = elapsed.as_secs_f64().max(0.1);
+
+    let (rx, tx) = nets.iter().fold((0u64, 0u64), |(r, t), (_name, data)| {
+        (r + data.total_received(), t + data.total_transmitted())
+    });
+
+    let dl = (rx.saturating_sub(*last_rx) as f64) / secs / 1024.0; // KB/s
+    let ul = (tx.saturating_sub(*last_tx) as f64) / secs / 1024.0;
+
+    *last_time = now;
+    *last_rx = rx;
+    *last_tx = tx;
+
+    NetSpeed {
+        download_kbps: (dl * 10.0).round() / 10.0,
+        upload_kbps: (ul * 10.0).round() / 10.0,
+    }
+}
+
+#[tauri::command]
 fn open_external(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("Failed to open URL: {e}"))
 }
@@ -507,6 +589,43 @@ async fn tts_speak_elevenlabs(
     Ok(STANDARD.encode(&bytes))
 }
 
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+async fn open_auth_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri::{Emitter, WebviewUrl, WebviewWindowBuilder};
+
+    // Close any existing auth window
+    if let Some(existing) = app.get_webview_window("auth") {
+        let _ = existing.close();
+    }
+
+    let parsed_url: Url = url.parse().map_err(|e: url::ParseError| format!("Invalid URL: {e}"))?;
+    let app_handle = app.clone();
+
+    WebviewWindowBuilder::new(&app, "auth", WebviewUrl::External(parsed_url))
+        .title("Sign in")
+        .inner_size(500.0, 700.0)
+        .on_navigation(move |nav_url| {
+            let url_str = nav_url.as_str();
+            // Intercept redirect to our callback URL
+            if url_str.starts_with("http://localhost/auth/callback") {
+                let _ = app_handle.emit("auth-callback", url_str.to_string());
+                return false; // Block navigation to localhost
+            }
+            true
+        })
+        .build()
+        .map_err(|e| format!("Failed to create auth window: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+async fn open_auth_window(_url: String) -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -514,7 +633,7 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window])
         .setup(|_app| {
             #[cfg(not(target_os = "android"))]
             {
