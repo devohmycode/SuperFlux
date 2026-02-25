@@ -13,6 +13,8 @@ function dispatchSyncEvent() {
 const STORAGE_KEYS = {
   FEEDS: 'superflux_feeds',
   ITEMS: 'superflux_items',
+  SYNCED_FEED_IDS: 'superflux_synced_feed_ids',
+  SYNCED_ITEM_IDS: 'superflux_synced_item_ids',
 };
 
 function loadLocal<T>(key: string, fallback: T): T {
@@ -219,12 +221,32 @@ export const SyncService = {
       .eq('user_id', userId);
     if (itemsErr) throw itemsErr;
 
+    // ---- Detect remote deletions (feeds/items previously synced but no longer in Supabase) ----
+    const prevSyncedFeedIds = new Set<string>(loadLocal(STORAGE_KEYS.SYNCED_FEED_IDS, []));
+    const prevSyncedItemIds = new Set<string>(loadLocal(STORAGE_KEYS.SYNCED_ITEM_IDS, []));
+    const remoteFeedIdSet = new Set((remoteFeeds ?? []).map((r: Record<string, unknown>) => r.id as string));
+    const remoteItemIdSet = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.id as string));
+    const remoteItemUrlSet = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.url as string).filter(Boolean));
+
+    // Feeds previously synced but now missing from Supabase → deleted remotely
+    const deletedFeedIds = new Set<string>();
+    for (const id of prevSyncedFeedIds) {
+      if (!remoteFeedIdSet.has(id)) deletedFeedIds.add(id);
+    }
+    // Items previously synced but now missing from Supabase → deleted remotely
+    const deletedItemIds = new Set<string>();
+    for (const id of prevSyncedItemIds) {
+      if (!remoteItemIdSet.has(id)) deletedItemIds.add(id);
+    }
+
     // ---- Merge feeds (last-write-wins on updated_at, match by id OR url) ----
     const localFeeds: Feed[] = loadLocal(STORAGE_KEYS.FEEDS, []);
     const feedMap = new Map<string, Feed>();
     const urlToFeedId = new Map<string, string>(); // URL → canonical local ID
 
     for (const lf of localFeeds) {
+      // Skip feeds that were deleted remotely
+      if (deletedFeedIds.has(lf.id)) continue;
       feedMap.set(lf.id, lf);
       if (lf.url) urlToFeedId.set(lf.url, lf.id);
     }
@@ -269,6 +291,9 @@ export const SyncService = {
     const urlToId = new Map<string, string>(); // URL → canonical ID for dedup
 
     for (const li of localItems) {
+      // Skip items deleted remotely or belonging to deleted feeds
+      if (deletedItemIds.has(li.id)) continue;
+      if (deletedFeedIds.has(li.feedId)) continue;
       itemMap.set(li.id, li);
       if (li.url) urlToId.set(li.url, li.id);
     }
@@ -312,9 +337,8 @@ export const SyncService = {
     saveLocal(STORAGE_KEYS.FEEDS, mergedFeeds);
     saveLocal(STORAGE_KEYS.ITEMS, mergedItems);
 
-    // ---- Push local-only feeds to remote (skip feeds already synced by URL) ----
-    const remoteFeedIds = new Set((remoteFeeds ?? []).map((r: Record<string, unknown>) => r.id as string));
-    const feedsToPush = mergedFeeds.filter(f => !remoteFeedIds.has(f.id) && !remoteFeedUrls.has(f.url));
+    // ---- Push local-only feeds to remote (skip feeds already synced by URL or deleted remotely) ----
+    const feedsToPush = mergedFeeds.filter(f => !remoteFeedIdSet.has(f.id) && !remoteFeedUrls.has(f.url) && !deletedFeedIds.has(f.id));
     if (feedsToPush.length > 0) {
       // Use insert for new feeds (they don't exist remotely yet)
       for (const feed of feedsToPush) {
@@ -325,9 +349,7 @@ export const SyncService = {
     }
 
     // ---- Push local-only items to remote (batch 500) ----
-    const remoteItemIds = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.id as string));
-    const remoteItemUrls = new Set((remoteItems ?? []).map((r: Record<string, unknown>) => r.url as string).filter(Boolean));
-    const itemsToPush = mergedItems.filter(i => !remoteItemIds.has(i.id) && !(i.url && remoteItemUrls.has(i.url)));
+    const itemsToPush = mergedItems.filter(i => !remoteItemIdSet.has(i.id) && !(i.url && remoteItemUrlSet.has(i.url)) && !deletedItemIds.has(i.id) && !deletedFeedIds.has(i.feedId));
     // Ensure every referenced feed exists before inserting items
     // Populate cache so ensureFeedInSupabase can find them
     for (const f of mergedFeeds) _feedsCache.set(f.id, f);
@@ -346,6 +368,12 @@ export const SyncService = {
       const { error } = await supabase.from('feed_items').insert(rows);
       if (error) dispatchSyncError('fullSync push items batch', error);
     }
+
+    // ---- Track synced IDs for future orphan detection ----
+    const allSyncedFeedIds = [...remoteFeedIdSet, ...feedsToPush.map(f => f.id)];
+    const allSyncedItemIds = [...remoteItemIdSet, ...safeItemsToPush.map(i => i.id)];
+    saveLocal(STORAGE_KEYS.SYNCED_FEED_IDS, allSyncedFeedIds);
+    saveLocal(STORAGE_KEYS.SYNCED_ITEM_IDS, allSyncedItemIds);
 
     // ---- Notify useFeedStore to reload ----
     dispatchSyncEvent();

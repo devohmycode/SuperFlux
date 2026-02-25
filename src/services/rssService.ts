@@ -356,6 +356,9 @@ export async function fetchAndParseFeed(
   feed: Feed,
   existingItemIds: Set<string>
 ): Promise<FeedItem[]> {
+  // Skip feeds without a valid URL (e.g. virtual feeds like chrome-extension bookmarks)
+  if (!feed.url || feed.url.trim() === '') return [];
+
   const channel = await fetchFeed(feed.url);
 
   // Auto-detect podcast: if feed has audio enclosures, treat as podcast

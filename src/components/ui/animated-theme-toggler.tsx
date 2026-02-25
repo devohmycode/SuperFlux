@@ -1,30 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Moon, Sun, Sunrise } from "lucide-react"
+import { Moon, Sun, Eclipse } from "lucide-react"
 import { flushSync } from "react-dom"
 
 import { cn } from "@/lib/utils"
 
-type Theme = "light" | "sepia" | "dark"
+type Theme = "light" | "dark" | "amoled"
 
-const THEME_ORDER: Theme[] = ["light", "sepia", "dark"]
+const THEME_ORDER: Theme[] = ["light", "dark", "amoled"]
 
 function getTheme(): Theme {
+  if (document.documentElement.classList.contains("amoled")) return "amoled"
   if (document.documentElement.classList.contains("dark")) return "dark"
-  if (document.documentElement.classList.contains("sepia")) return "sepia"
   return "light"
 }
 
 function applyTheme(theme: Theme) {
-  document.documentElement.classList.remove("dark", "sepia")
-  if (theme !== "light") {
-    document.documentElement.classList.add(theme)
+  document.documentElement.classList.remove("dark", "amoled")
+  if (theme === "dark") {
+    document.documentElement.classList.add("dark")
+  } else if (theme === "amoled") {
+    document.documentElement.classList.add("amoled")
   }
   localStorage.setItem("theme", theme)
 }
 
 const ThemeIcon = ({ theme }: { theme: Theme }) => {
+  if (theme === "amoled") return <Eclipse />
   if (theme === "dark") return <Moon />
-  if (theme === "sepia") return <Sunrise />
   return <Sun />
 }
 
@@ -95,6 +97,7 @@ export const AnimatedThemeToggler = ({
       ref={buttonRef}
       onClick={toggleTheme}
       className={cn(className)}
+      title={theme === "light" ? "Clair" : theme === "dark" ? "Sombre" : "AMOLED"}
       {...props}
     >
       <ThemeIcon theme={theme} />

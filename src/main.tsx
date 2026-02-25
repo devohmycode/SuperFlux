@@ -12,11 +12,11 @@ import { ProProvider } from './contexts/ProContext'
   const opacity = Number(localStorage.getItem('superflux_window_opacity') || '85');
 
   if (effect !== 'none') {
-    const isDark = document.documentElement.classList.contains('dark');
-    const isSepia = document.documentElement.classList.contains('sepia');
+    const isAmoled = document.documentElement.classList.contains('amoled');
+    const isDark = isAmoled || document.documentElement.classList.contains('dark');
     let r: number, g: number, b: number;
-    if (isDark) { r = 20; g = 20; b = 20; }
-    else if (isSepia) { r = 210; g = 195; b = 170; }
+    if (isAmoled) { r = 0; g = 0; b = 0; }
+    else if (isDark) { r = 20; g = 20; b = 20; }
     else { r = 240; g = 240; b = 240; }
     const alpha = Math.round((opacity / 100) * 200);
 

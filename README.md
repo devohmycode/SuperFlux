@@ -4,7 +4,7 @@
 [![Build & Release](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml)
 # SuperFlux
 
-A fast, native desktop RSS reader with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, and a collapsible bar mode. Built with Tauri 2 and React 19.
+A fast, native desktop RSS reader and productivity suite with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, bookmarks, notes, a document editor, a drawing canvas, and a collapsible bar mode. Built with Tauri 2 and React 19.
 
 ![Shot2](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-02.png)
 
@@ -16,9 +16,9 @@ The interface is split into three independently resizable columns with drag hand
 
 | Panel | Default Width | Content |
 |-------|--------------|---------|
-| **Sources** (left) | 18% | Feed tree organized by type, folders with drag-and-drop, unread counts, favorites, read later |
+| **Sources** (left) | 18% | Feed tree, folders, unread counts, favorites, read later, mode tabs |
 | **Feed** (center) | 32% | Article list with pagination, time grouping, 3 view modes (normal, compact, cards) |
-| **Reader** (right) | 50% | Full article reader, AI summary, TTS, highlights, web view toggle, Reddit comments |
+| **Reader** (right) | 50% | Full article reader, AI summary, TTS, highlights, web view, Reddit comments, or contextual module (notes editor, document editor, bookmark reader, drawing canvas) |
 
 Each panel can be **closed individually** -- it collapses into a thin clickable strip. Toggle panels with keyboard shortcuts `1`, `2`, `3`. Panels resize freely by dragging the handles between them.
 
@@ -83,6 +83,48 @@ Built-in audio player for podcast feeds with:
 - Seekable progress bar, volume slider
 - Album artwork display
 
+### 5 Integrated Modes
+
+Switch between modes using the icon tab bar in the sources panel or keyboard shortcuts `Ctrl+1` through `Ctrl+5`. A command palette (`Ctrl+K`) provides quick access to all commands and navigation.
+
+| Mode | Shortcut | Description |
+|------|----------|-------------|
+| **SuperFlux** | `Ctrl+1` | RSS reader -- the default 3-panel feed experience |
+| **SuperBookmark** | `Ctrl+2` | Web bookmark manager with full-page reader and metadata extraction |
+| **SuperNote** | `Ctrl+3` | Sticky notes with folders, color-coded cards, and cloud sync |
+| **SuperEditor** | `Ctrl+4` | Document editor with Pandoc export (PDF, DOCX, HTML, Markdown) |
+| **SuperDraw** | `Ctrl+5` | Canvas drawing tool with shapes, freehand, text, arrows, dark/light mode, and PNG export |
+
+### SuperBookmark
+
+Save and organize web bookmarks with automatic metadata extraction (title, excerpt, favicon, author). Features a built-in reader view for saved pages.
+
+### SuperNote
+
+Quick note-taking with folder organization, sticky-note style cards, and Supabase cloud sync. Notes support positioning, colors, and resizing.
+
+### SuperEditor
+
+A full document editor with:
+
+- Folder organization and document management
+- **Pandoc integration** for exporting to PDF, DOCX, HTML, Markdown, and more
+- Cloud sync via Supabase
+
+### SuperDraw
+
+A custom canvas drawing tool inspired by Excalidraw:
+
+- **10 tools**: select, hand (pan), rectangle, ellipse, diamond, line, arrow, freehand, text, eraser
+- **Color picker** for stroke and fill with 7 preset colors + transparent
+- **Stroke width** selector (1--8px)
+- **Font size** selector for text tool (12--64px)
+- **Dark / light mode** toggle (independent of app theme, auto-adapts element colors)
+- **Zoom & pan** with mouse wheel (Ctrl+wheel to zoom, wheel to pan)
+- **Selection** with resize handles, multi-select box, duplicate (`Ctrl+D`), delete
+- **Undo / redo** history (`Ctrl+Z` / `Ctrl+Y`)
+- **PNG export** and persistent local storage
+
 ### Full Article Extraction
 
 When RSS content is truncated, SuperFlux automatically fetches the full article from the original site using [Readability](https://github.com/mozilla/readability). A manual "Fetch from original site" button is also available.
@@ -106,7 +148,7 @@ Sign in with a Supabase account to sync feeds, read/star/bookmark status across 
 
 ### Appearance
 
-- **3 themes**: Light, Sepia, Dark with animated circular transition effect
+- **3 themes**: Light, Sepia, Dark (+ AMOLED) with animated circular transition effect
 - **Window effects** (Windows): Mica, Acrylic, Blur, Tabbed with adjustable opacity
 - **Custom frameless title bar** with minimize, maximize, collapse controls
 ![Shot4](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-04.png)
@@ -114,12 +156,20 @@ Sign in with a Supabase account to sync feeds, read/star/bookmark status across 
 
 | Key | Action |
 |-----|--------|
-| `1` | Toggle Sources panel |
-| `2` | Toggle Feed panel |
-| `3` | Toggle Reader panel |
-| `↑` `↓` | Navigate articles |
-| `Enter` | Open selected article |
-| `S` | Toggle star/favorite |
+| `Ctrl+K` | Open command palette |
+| `Ctrl+1`--`5` | Switch mode (Flux, Bookmark, Note, Editor, Draw) |
+| `Alt+1` | Toggle Sources panel |
+| `Alt+2` | Toggle Feed panel |
+| `Alt+3` | Toggle Reader panel |
+| `J` / `K` | Next / previous article |
+| `O` | Open article in browser |
+| `R` | Toggle read / unread |
+| `S` | Toggle star / favorite |
+| `B` | Toggle read later |
+| `Shift+R` | Mark all as read |
+| `Ctrl+D` | Duplicate selection (Draw mode) |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `?` | Show shortcuts help |
 
 ## Pro Plan
 
@@ -184,9 +234,17 @@ src/
   types.ts                   # Feed, FeedItem, FeedCategory, TextHighlight types
   index.css                  # Full theme + window effect CSS
   components/
-    SourcePanel.tsx           # Panel 1 -- feed tree, folders, sources
+    SourcePanel.tsx           # Panel 1 -- feed tree, folders, sources, mode tabs
     FeedPanel.tsx             # Panel 2 -- article list, view modes, pagination
     ReaderPanel.tsx           # Panel 3 -- reader, web view, comments, TTS
+    NotePanel.tsx             # Note list panel (SuperNote mode)
+    NoteEditor.tsx            # Note editor (SuperNote mode)
+    BookmarkPanel.tsx         # Bookmark list panel (SuperBookmark mode)
+    BookmarkReader.tsx        # Bookmark reader view (SuperBookmark mode)
+    SuperEditor.tsx           # Document editor with Pandoc export (SuperEditor mode)
+    SuperDraw.tsx             # Canvas drawing tool (SuperDraw mode)
+    CommandPalette.tsx        # Ctrl+K command palette
+    ShortcutsOverlay.tsx      # Keyboard shortcuts help overlay
     TitleBar.tsx              # Custom title bar with bar/collapse mode
     AudioPlayer.tsx           # Embedded podcast player
     SettingsModal.tsx         # Settings (account, provider, AI, TTS, appearance)
@@ -205,6 +263,10 @@ src/
     syncService.ts            # Supabase cloud sync logic
     feedSearchService.ts      # Feed discovery (Feedly, iTunes, Reddit)
     providerSync.ts           # External provider sync orchestration
+    bookmarkService.ts        # Bookmark CRUD and metadata extraction
+    noteService.ts            # Notes cloud sync with Supabase
+    editorDocService.ts       # Editor documents cloud sync
+    pandocService.ts          # Pandoc export integration
     providers/
       miniflux.ts             # Miniflux API client
       googleReader.ts         # Google Reader API (FreshRSS, BazQux)
@@ -213,6 +275,7 @@ src/
     useFeedStore.ts           # Feed & article state management
     useHighlightStore.ts      # Highlight persistence
     useResizablePanels.ts     # Panel resize logic
+    useCommands.ts            # Command palette & keyboard shortcuts
   contexts/
     AuthContext.tsx            # Supabase auth context
     ProContext.tsx             # Pro status management & caching

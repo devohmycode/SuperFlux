@@ -96,5 +96,9 @@ export function useResizablePanels({ panels }: UseResizablePanelsOptions) {
     };
   }, [panels]);
 
-  return { widths, handleMouseDown, containerRef };
+  const setWidthsOverride = useCallback((newWidths: [number, number, number]) => {
+    setWidths(newWidths);
+  }, []);
+
+  return { widths, setWidths: setWidthsOverride, handleMouseDown, containerRef };
 }
