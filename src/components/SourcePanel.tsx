@@ -47,8 +47,9 @@ interface SourcePanelProps {
   onDeleteFolder: (categoryId: string, path: string) => void;
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
   onClose?: () => void;
-  brandMode: 'flux' | 'note' | 'bookmark' | 'editor';
+  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw';
   onToggleBrand: () => void;
+  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => void;
   onSyncIntervalChange?: (interval: number) => void;
   onShowSysInfoChange?: (show: boolean) => void;
   showSysInfo?: boolean;
@@ -83,6 +84,7 @@ interface SourcePanelProps {
   onDeleteEditorFolder?: (name: string) => void;
   onMoveDocToFolder?: (docId: string, folder: string | undefined) => void;
   onAddBookmark?: (url: string) => void;
+  onReorderFeed?: (feedId: string, targetFeedId: string, position: 'before' | 'after') => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -188,6 +190,7 @@ export function SourcePanel({
   onClose,
   brandMode,
   onToggleBrand,
+  onBrandSwitch,
   onSyncIntervalChange,
   onShowSysInfoChange,
   showSysInfo,
@@ -220,6 +223,7 @@ export function SourcePanel({
   onDeleteEditorFolder,
   onMoveDocToFolder,
   onAddBookmark,
+  onReorderFeed,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -253,6 +257,7 @@ export function SourcePanel({
   // Drag-and-drop state
   const [dragFeedId, setDragFeedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dropFeedTarget, setDropFeedTarget] = useState<{ feedId: string; position: 'before' | 'after' } | null>(null);
 
   // Auto-focus inline inputs
   useEffect(() => {
@@ -348,6 +353,7 @@ export function SourcePanel({
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     setDragFeedId(null);
     setDropTarget(null);
+    setDropFeedTarget(null);
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = '';
     }
@@ -366,6 +372,39 @@ export function SourcePanel({
     setDropTarget(prev => prev === targetKey ? null : prev);
   }, []);
 
+  const handleFeedDragOver = useCallback((e: React.DragEvent, targetFeedId: string) => {
+    if (!dragFeedId || dragFeedId === targetFeedId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position: 'before' | 'after' = e.clientY < midY ? 'before' : 'after';
+    setDropFeedTarget(prev => {
+      if (prev?.feedId === targetFeedId && prev?.position === position) return prev;
+      return { feedId: targetFeedId, position };
+    });
+    setDropTarget(null);
+  }, [dragFeedId]);
+
+  const handleFeedDrop = useCallback((e: React.DragEvent, targetFeedId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const feedId = e.dataTransfer.getData('text/plain');
+    if (feedId && feedId !== targetFeedId && dropFeedTarget) {
+      onReorderFeed?.(feedId, targetFeedId, dropFeedTarget.position);
+    }
+    setDragFeedId(null);
+    setDropTarget(null);
+    setDropFeedTarget(null);
+  }, [onReorderFeed, dropFeedTarget]);
+
+  const handleFeedDragLeave = useCallback((e: React.DragEvent, targetFeedId: string) => {
+    const related = e.relatedTarget as Node | null;
+    if (e.currentTarget instanceof HTMLElement && related && e.currentTarget.contains(related)) return;
+    setDropFeedTarget(prev => prev?.feedId === targetFeedId ? null : prev);
+  }, []);
+
   const handleDropOnRoot = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -373,6 +412,7 @@ export function SourcePanel({
     if (feedId) onMoveFeedToFolder(feedId, undefined);
     setDragFeedId(null);
     setDropTarget(null);
+    setDropFeedTarget(null);
   }, [onMoveFeedToFolder]);
 
   const handleDropOnFolder = useCallback((e: React.DragEvent, folderPath: string) => {
@@ -382,6 +422,7 @@ export function SourcePanel({
     if (feedId) onMoveFeedToFolder(feedId, folderPath);
     setDragFeedId(null);
     setDropTarget(null);
+    setDropFeedTarget(null);
   }, [onMoveFeedToFolder]);
 
   const totalUnread = categories.reduce(
@@ -422,16 +463,22 @@ export function SourcePanel({
       );
     }
 
+    const isDropBefore = dropFeedTarget?.feedId === feed.id && dropFeedTarget.position === 'before';
+    const isDropAfter = dropFeedTarget?.feedId === feed.id && dropFeedTarget.position === 'after';
+
     return (
       <motion.button
         key={feed.id}
-        className={`feed-item-btn ${selectedFeedId === feed.id ? "active" : ""} ${dragFeedId === feed.id ? "dragging" : ""}`}
+        className={`feed-item-btn ${selectedFeedId === feed.id ? "active" : ""} ${dragFeedId === feed.id ? "dragging" : ""} ${isDropBefore ? "drop-before" : ""} ${isDropAfter ? "drop-after" : ""}`}
         style={{ paddingLeft: FEED_BASE_INDENT + depth * INDENT_STEP }}
         onClick={() => onSelectFeed(feed.id, feed.source)}
         onContextMenu={(e) => handleFeedContextMenu(e, feed, categoryId)}
         draggable
         {...{ onDragStart: (e: React.DragEvent) => handleDragStart(e, feed.id) } as any}
         {...{ onDragEnd: (e: React.DragEvent) => handleDragEnd(e) } as any}
+        {...{ onDragOver: (e: React.DragEvent) => handleFeedDragOver(e, feed.id) } as any}
+        {...{ onDrop: (e: React.DragEvent) => handleFeedDrop(e, feed.id) } as any}
+        {...{ onDragLeave: (e: React.DragEvent) => handleFeedDragLeave(e, feed.id) } as any}
         initial={{ opacity: 0, x: -8 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: feedIdx * 0.03, duration: 0.2 }}
@@ -575,7 +622,7 @@ export function SourcePanel({
           <span className="brand-icon">◈</span>
           <button className="brand-name-btn" onClick={onToggleBrand}>
             <ShinyText
-              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : 'SuperBookmark'}
+              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : 'SuperBookmark'}
               speed={2}
               delay={0}
               color="#787878"
@@ -631,7 +678,7 @@ export function SourcePanel({
               onMoveDocToFolder={onMoveDocToFolder}
             />
           ) : <div className="panel-empty-note" />
-        ) : brandMode === 'bookmark' ? (
+        ) : brandMode === 'bookmark' || brandMode === 'draw' ? (
           <div className="panel-empty-note" />
         ) : (
         <>
@@ -750,31 +797,28 @@ export function SourcePanel({
         )}
       </div>
 
-      {/* Search bar — visible on all pages */}
-      <div className="source-panel-search">
-        <span className="source-panel-search-icon">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-            <circle cx="7" cy="7" r="5" />
-            <line x1="11" y1="11" x2="14.5" y2="14.5" />
-          </svg>
-        </span>
-        <Input
-          type="text"
-          className="source-panel-search-input"
-          placeholder="Rechercher..."
-          value={searchQuery}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearchChange?.(e.target.value)}
-        />
-        {searchQuery && (
-          <button
-            className="source-panel-search-clear"
-            onClick={() => onSearchChange?.('')}
-            title="Effacer"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+      {/* Mode tabs + Ctrl+K hint */}
+      {onBrandSwitch && (
+        <div className="mode-tab-bar">
+          {([
+            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1' },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2' },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3' },
+            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4' },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5' },
+          ]).map(tab => (
+            <button
+              key={tab.mode}
+              className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''}`}
+              onClick={() => onBrandSwitch(tab.mode)}
+              title={`${tab.label} (Ctrl+${tab.shortcut})`}
+            >
+              <span className="mode-tab-icon">{tab.icon}</span>
+            </button>
+          ))}
+          <span className="mode-tab-kbd" title="Recherche / Commandes">Ctrl+K</span>
+        </div>
+      )}
 
       {brandMode === 'flux' && syncError && (
         <div className="sync-error-banner" title={syncError}>

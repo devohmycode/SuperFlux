@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
+import Markdown from 'react-markdown';
 import GradientText from './GradientText';
 import { NoteStickyBoard } from './NoteStickyBoard';
 
@@ -120,9 +121,13 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
                   <span className="note-card-number">{idx + 1}</span>
                   <h3 className="note-card-title">{note.title || 'Sans titre'}</h3>
                   <span className="note-card-date">{formatNoteDate(note.updatedAt)}</span>
-                  <p className="note-card-content">
-                    {note.content || 'Note vide...'}
-                  </p>
+                  <div className="note-card-content note-card-md">
+                    {note.content ? (
+                      <Markdown>{note.content}</Markdown>
+                    ) : (
+                      <span className="note-card-empty">Note vide...</span>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </div>

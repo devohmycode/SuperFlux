@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import Markdown from 'react-markdown';
 import type { Note } from './NotePanel';
 
 interface NoteStickyBoardProps {
@@ -230,12 +231,16 @@ function StickyNoteItem({
             onPointerDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <p
-            className="sticky-note-text"
+          <div
+            className="sticky-note-text sticky-note-md"
             onDoubleClick={() => { setIsEditing(true); setEditContent(note.content); }}
           >
-            {note.content || 'Double-cliquez pour modifier...'}
-          </p>
+            {note.content ? (
+              <Markdown>{note.content}</Markdown>
+            ) : (
+              <p className="sticky-note-placeholder">Double-cliquez pour modifier...</p>
+            )}
+          </div>
         )}
       </div>
 

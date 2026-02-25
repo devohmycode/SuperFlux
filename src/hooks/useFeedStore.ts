@@ -153,6 +153,7 @@ export interface FeedStore {
   renameFolder: (categoryId: string, oldPath: string, newName: string) => void;
   deleteFolder: (categoryId: string, path: string) => void;
   moveFeedToFolder: (feedId: string, folder: string | undefined) => void;
+  reorderFeed: (feedId: string, targetFeedId: string, position: 'before' | 'after') => void;
 }
 
 export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
@@ -550,6 +551,22 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setFeeds(prev => prev.map(f => f.id === feedId ? { ...f, folder } : f));
   }, []);
 
+  // Reorder a feed before/after another feed in the array
+  const reorderFeed = useCallback((feedId: string, targetFeedId: string, position: 'before' | 'after') => {
+    if (feedId === targetFeedId) return;
+    setFeeds(prev => {
+      const idx = prev.findIndex(f => f.id === feedId);
+      if (idx === -1) return prev;
+      const feed = prev[idx];
+      const without = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+      const targetIdx = without.findIndex(f => f.id === targetFeedId);
+      if (targetIdx === -1) return prev;
+      const insertAt = position === 'before' ? targetIdx : targetIdx + 1;
+      without.splice(insertAt, 0, feed);
+      return without;
+    });
+  }, []);
+
   // ── Favorites / Read Later ordering ──
 
   const getFavoritesOrder = useCallback((): string[] => {
@@ -602,5 +619,6 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     renameFolder,
     deleteFolder,
     moveFeedToFolder,
+    reorderFeed,
   };
 }

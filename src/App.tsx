@@ -5,12 +5,17 @@ import { ReaderPanel } from './components/ReaderPanel';
 import { NotePanel, type Note } from './components/NotePanel';
 import { NoteEditor } from './components/NoteEditor';
 import { SuperEditor } from './components/SuperEditor';
+import { SuperDraw } from './components/SuperDraw';
 import { type EditorDoc, loadEditorDocs, saveEditorDocs, loadEditorFolders, saveEditorFolders } from './components/EditorFileList';
 import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
+import { fetchNotes, upsertNote, removeNote, updateNoteContent, updateNoteMeta } from './services/noteService';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
 import type { WebBookmark } from './services/bookmarkService';
 import { toggleBookmarkRead, addBookmark } from './services/bookmarkService';
+import { CommandPalette } from './components/CommandPalette';
+import { ShortcutsOverlay } from './components/ShortcutsOverlay';
+import { useCommands, type Command } from './hooks/useCommands';
 import { ResizeHandle } from './components/ResizeHandle';
 import { TitleBar } from './components/TitleBar';
 import { useResizablePanels } from './hooks/useResizablePanels';
@@ -46,6 +51,7 @@ function getSyncInterval(): number {
 
 export default function App() {
   const { user } = useAuth();
+  const { commands, registerCommands, paletteOpen, closePalette, helpOpen, toggleHelp, closeHelp } = useCommands();
 
   // Sync callbacks wired to SyncService (fire-and-forget, errors logged)
   // Also notifies provider sync when item statuses change
@@ -93,7 +99,7 @@ export default function App() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showReadLater, setShowReadLater] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor'>('flux');
+  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor' | 'draw'>('flux');
   const [searchQuery, setSearchQuery] = useState('');
   const [brandTransition, setBrandTransition] = useState(false);
   const [syncInterval, setSyncInterval] = useState(getSyncInterval);
@@ -147,8 +153,9 @@ export default function App() {
     editorDocs.find(d => d.id === selectedDocId) ?? null,
   [editorDocs, selectedDocId]);
 
-  // Debounce timer for Supabase content updates
+  // Debounce timers for Supabase content updates
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Bookmark reader state (SuperBookmark mode) ──
   const [selectedBookmark, setSelectedBookmark] = useState<WebBookmark | null>(null);
@@ -166,7 +173,6 @@ export default function App() {
   const handleAddBookmark = useCallback(async (url: string) => {
     if (!user) return;
     const id = crypto.randomUUID();
-    const now = new Date().toISOString();
     const bk = await addBookmark(user.id, {
       id,
       url,
@@ -290,12 +296,21 @@ export default function App() {
     };
     setNotes(prev => [newNote, ...prev]);
     setSelectedNoteId(newNote.id);
-  }, [selectedNoteFolder]);
+    if (user) {
+      upsertNote(user.id, {
+        id: newNote.id,
+        title: newNote.title,
+        content: newNote.content,
+        folder: newNote.folder ?? null,
+      });
+    }
+  }, [selectedNoteFolder, user]);
 
   const handleDeleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
     setSelectedNoteId(prev => prev === noteId ? null : prev);
-  }, []);
+    if (user) removeNote(user.id, noteId);
+  }, [user]);
 
   const handleUpdateNote = useCallback((noteId: string, updates: Partial<Note>) => {
     setNotes(prev => prev.map(n =>
@@ -303,7 +318,30 @@ export default function App() {
         ? { ...n, ...updates, updatedAt: new Date().toISOString() }
         : n
     ));
-  }, []);
+    if (user) {
+      // Separate content updates (debounced) from meta updates (immediate)
+      if ('content' in updates) {
+        if (noteSaveTimerRef.current) clearTimeout(noteSaveTimerRef.current);
+        noteSaveTimerRef.current = setTimeout(() => {
+          updateNoteContent(user.id, noteId, updates.content!);
+        }, 1000);
+      }
+      // Sync non-content fields immediately
+      const meta: Record<string, any> = {};
+      if ('title' in updates) meta.title = updates.title;
+      if ('folder' in updates) meta.folder = updates.folder ?? null;
+      if ('stickyX' in updates) meta.sticky_x = updates.stickyX ?? null;
+      if ('stickyY' in updates) meta.sticky_y = updates.stickyY ?? null;
+      if ('stickyRotation' in updates) meta.sticky_rotation = updates.stickyRotation ?? null;
+      if ('stickyZIndex' in updates) meta.sticky_z_index = updates.stickyZIndex ?? null;
+      if ('stickyColor' in updates) meta.sticky_color = updates.stickyColor ?? null;
+      if ('stickyWidth' in updates) meta.sticky_width = updates.stickyWidth ?? null;
+      if ('stickyHeight' in updates) meta.sticky_height = updates.stickyHeight ?? null;
+      if (Object.keys(meta).length > 0) {
+        updateNoteMeta(user.id, noteId, meta);
+      }
+    }
+  }, [user]);
 
   const handleCreateNoteFolder = useCallback((name: string) => {
     setNoteFolders(prev => [...prev, name]);
@@ -311,21 +349,40 @@ export default function App() {
 
   const handleRenameNoteFolder = useCallback((oldName: string, newName: string) => {
     setNoteFolders(prev => prev.map(f => f === oldName ? newName : f));
-    setNotes(prev => prev.map(n => n.folder === oldName ? { ...n, folder: newName } : n));
+    setNotes(prev => {
+      const updated = prev.map(n => n.folder === oldName ? { ...n, folder: newName } : n);
+      // Sync folder rename to Supabase for affected notes
+      if (user) {
+        updated.filter(n => n.folder === newName).forEach(n => {
+          updateNoteMeta(user.id, n.id, { folder: newName });
+        });
+      }
+      return updated;
+    });
     if (selectedNoteFolder === oldName) setSelectedNoteFolder(newName);
-  }, [selectedNoteFolder]);
+  }, [selectedNoteFolder, user]);
 
   const handleDeleteNoteFolder = useCallback((name: string) => {
     setNoteFolders(prev => prev.filter(f => f !== name));
-    setNotes(prev => prev.map(n => n.folder === name ? { ...n, folder: undefined } : n));
+    setNotes(prev => {
+      const updated = prev.map(n => n.folder === name ? { ...n, folder: undefined } : n);
+      // Sync folder removal to Supabase for affected notes
+      if (user) {
+        updated.filter(n => !n.folder).forEach(n => {
+          updateNoteMeta(user.id, n.id, { folder: null });
+        });
+      }
+      return updated;
+    });
     if (selectedNoteFolder === name) setSelectedNoteFolder(null);
-  }, [selectedNoteFolder]);
+  }, [selectedNoteFolder, user]);
 
   const handleMoveNoteToFolder = useCallback((noteId: string, folder: string | undefined) => {
     setNotes(prev => prev.map(n =>
       n.id === noteId ? { ...n, folder, updatedAt: new Date().toISOString() } : n
     ));
-  }, []);
+    if (user) updateNoteMeta(user.id, noteId, { folder: folder ?? null });
+  }, [user]);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
@@ -344,6 +401,9 @@ export default function App() {
     if (brandMode === 'note') {
       setWidths([18, 57, 25]);
     } else if (brandMode === 'editor') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else if (brandMode === 'draw') {
       setFeedPanelOpen(false);
       setWidths([18, 0, 82]);
     } else {
@@ -375,6 +435,55 @@ export default function App() {
           setEditorDocs(docs);
         }
       }).catch(err => console.error('[editor-docs] fetch failed', err));
+      fetchNotes(userId).then(rows => {
+        console.log('[notes] fetched from Supabase:', rows.length);
+        if (rows.length > 0) {
+          const loaded: Note[] = rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            folder: r.folder ?? undefined,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            stickyX: r.sticky_x ?? undefined,
+            stickyY: r.sticky_y ?? undefined,
+            stickyRotation: r.sticky_rotation ?? undefined,
+            stickyZIndex: r.sticky_z_index ?? undefined,
+            stickyColor: r.sticky_color ?? undefined,
+            stickyWidth: r.sticky_width ?? undefined,
+            stickyHeight: r.sticky_height ?? undefined,
+          }));
+          setNotes(loaded);
+          const folders = [...new Set(loaded.map(n => n.folder).filter((f): f is string => !!f))];
+          if (folders.length > 0) setNoteFolders(prev => [...new Set([...prev, ...folders])]);
+        } else {
+          // Initial push: sync existing local notes to Supabase
+          const localNotes: Note[] = (() => {
+            try {
+              const raw = localStorage.getItem('superflux_notes');
+              return raw ? JSON.parse(raw) : [];
+            } catch { return []; }
+          })();
+          if (localNotes.length > 0) {
+            console.log('[notes] pushing', localNotes.length, 'local notes to Supabase');
+            localNotes.forEach(n => {
+              upsertNote(userId, {
+                id: n.id,
+                title: n.title,
+                content: n.content,
+                folder: n.folder ?? null,
+                sticky_x: n.stickyX ?? null,
+                sticky_y: n.stickyY ?? null,
+                sticky_rotation: n.stickyRotation ?? null,
+                sticky_z_index: n.stickyZIndex ?? null,
+                sticky_color: n.stickyColor ?? null,
+                sticky_width: n.stickyWidth ?? null,
+                sticky_height: n.stickyHeight ?? null,
+              });
+            });
+          }
+        }
+      }).catch(err => console.error('[notes] fetch failed', err));
     }
     prevUserRef.current = userId;
   }, [user]);
@@ -575,7 +684,7 @@ export default function App() {
     setBrandTransition(true);
     // At the midpoint of the animation, switch the mode
     setTimeout(() => {
-      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : 'flux');
+      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux');
       setSelectedNoteId(null);
       setSelectedBookmark(null);
       setSearchQuery('');
@@ -599,34 +708,96 @@ export default function App() {
     else if (showReadLater) store.reorderReadLater(orderedIds);
   }, [showFavorites, showReadLater, store]);
 
-  // Keyboard shortcuts: 1/2/3 toggle panels
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+  // ── Command Palette: register all commands ──
+  const itemsRef = useRef(searchedItems);
+  itemsRef.current = searchedItems;
+  const selectedItemRef = useRef(selectedItem);
+  selectedItemRef.current = selectedItem;
 
-      if (e.key === '1' || (e.altKey && e.key === '1')) {
-        e.preventDefault();
-        setSourcePanelOpen(prev => !prev);
-      } else if (e.key === '2' || (e.altKey && e.key === '2')) {
-        e.preventDefault();
-        setFeedPanelOpen(prev => !prev);
-      } else if (e.key === '3' || (e.altKey && e.key === '3')) {
-        e.preventDefault();
-        setReaderPanelOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+  useEffect(() => {
+    const cmds: Command[] = [
+      // ── Navigation ──
+      { id: 'nav.next-item', label: 'Article suivant', category: 'Navigation', shortcut: 'j', action: () => {
+        const items = itemsRef.current;
+        const cur = selectedItemRef.current;
+        const idx = cur ? items.findIndex(i => i.id === cur.id) : -1;
+        const next = items[idx + 1];
+        if (next) handleSelectItem(next);
+      }},
+      { id: 'nav.prev-item', label: 'Article précédent', category: 'Navigation', shortcut: 'k', action: () => {
+        const items = itemsRef.current;
+        const cur = selectedItemRef.current;
+        const idx = cur ? items.findIndex(i => i.id === cur.id) : items.length;
+        const prev = items[idx - 1];
+        if (prev) handleSelectItem(prev);
+      }},
+      { id: 'nav.open-item', label: 'Ouvrir dans le navigateur', category: 'Navigation', shortcut: 'o', action: () => {
+        const item = selectedItemRef.current;
+        if (item?.url) window.open(item.url, '_blank');
+      }},
+
+      // ── Panels ──
+      { id: 'panel.toggle-source', label: 'Toggle panel Sources', category: 'Panels', shortcut: 'Alt+1', action: () => setSourcePanelOpen(prev => !prev) },
+      { id: 'panel.toggle-feed', label: 'Toggle panel Articles', category: 'Panels', shortcut: 'Alt+2', action: () => setFeedPanelOpen(prev => !prev) },
+      { id: 'panel.toggle-reader', label: 'Toggle panel Lecteur', category: 'Panels', shortcut: 'Alt+3', action: () => setReaderPanelOpen(prev => !prev) },
+
+      // ── Actions ──
+      { id: 'action.toggle-read', label: 'Marquer lu / non lu', category: 'Actions', shortcut: 'r', action: () => {
+        const item = selectedItemRef.current;
+        if (item) store.toggleRead(item.id);
+      }},
+      { id: 'action.toggle-star', label: 'Ajouter / retirer des favoris', category: 'Actions', shortcut: 's', action: () => {
+        const item = selectedItemRef.current;
+        if (item) store.toggleStar(item.id);
+      }},
+      { id: 'action.toggle-bookmark', label: 'Ajouter / retirer de Lire plus tard', category: 'Actions', shortcut: 'b', action: () => {
+        const item = selectedItemRef.current;
+        if (item) store.toggleBookmark(item.id);
+      }},
+      { id: 'action.mark-all-read', label: 'Tout marquer comme lu', category: 'Actions', shortcut: 'Shift+r', action: () => store.markAllAsRead(selectedFeedId || undefined) },
+
+      // ── Modes ──
+      { id: 'mode.flux', label: 'Mode SuperFlux', category: 'Modes', shortcut: 'Ctrl+1', action: () => handleBrandSwitch('flux') },
+      { id: 'mode.bookmark', label: 'Mode SuperBookmark', category: 'Modes', shortcut: 'Ctrl+2', action: () => handleBrandSwitch('bookmark') },
+      { id: 'mode.note', label: 'Mode SuperNote', category: 'Modes', shortcut: 'Ctrl+3', action: () => handleBrandSwitch('note') },
+      { id: 'mode.editor', label: 'Mode SuperEditor', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
+      { id: 'mode.draw', label: 'Mode SuperDraw', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
+
+      // ── Feeds ──
+      { id: 'feed.sync', label: 'Synchroniser tous les feeds', category: 'Feeds', shortcut: 'Ctrl+Shift+s', action: () => handleSyncAll() },
+      { id: 'feed.search', label: 'Rechercher', category: 'Feeds', shortcut: '/', action: () => {
+        const input = document.querySelector<HTMLInputElement>('.source-search-input, .feed-search-input');
+        input?.focus();
+      }},
+
+      // ── App ──
+      { id: 'app.palette', label: 'Command Palette', category: 'App', shortcut: 'Ctrl+k', action: () => {} },
+      { id: 'app.shortcuts', label: 'Aide raccourcis', category: 'App', shortcut: '?', action: () => toggleHelp() },
+    ];
+    registerCommands(cmds);
+  }, [selectedFeedId, store, handleSelectItem, handleSyncAll, registerCommands]);
+
+  // Brand switch helper (direct mode, with same animation as toggle)
+  const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => {
+    setBrandTransition(true);
+    setTimeout(() => {
+      setBrandMode(mode);
+      setSearchQuery('');
+    }, 600);
+    setTimeout(() => setBrandTransition(false), 1200);
   }, []);
+
 
   // When some panels are closed, remaining open panels share the space via flex
   const allOpen = sourcePanelOpen && feedPanelOpen && readerPanelOpen;
 
   return (
     <div className={`app-wrapper ${isCollapsed ? 'app-wrapper--collapsed' : ''}`}>
+      <CommandPalette commands={commands} isOpen={paletteOpen} onClose={closePalette} />
+      <ShortcutsOverlay commands={commands} isOpen={helpOpen} onClose={closeHelp} />
       <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} pinnedItems={pinnedItems} categories={store.categories} onSelectFeed={handleSelectFeed} onSync={handleSyncAll} isSyncing={store.isSyncing} showSysInfo={showSysInfo} />
       {!isCollapsed && (
+        <>
         <div className="app" ref={containerRef}>
           {/* Brand transition overlay */}
           {brandTransition && (
@@ -640,7 +811,7 @@ export default function App() {
 
           {sourcePanelOpen ? (
             <>
-              <div className="panel panel-source" style={(allOpen || (brandMode === 'editor' && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
+              <div className="panel panel-source" style={(allOpen || ((brandMode === 'editor' || brandMode === 'draw') && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
                 <SourcePanel
                   categories={store.categories}
                   selectedFeedId={selectedFeedId}
@@ -667,9 +838,11 @@ export default function App() {
                   onRenameFolder={store.renameFolder}
                   onDeleteFolder={store.deleteFolder}
                   onMoveFeedToFolder={store.moveFeedToFolder}
+                  onReorderFeed={store.reorderFeed}
                   onClose={handleCloseSourcePanel}
                   brandMode={brandMode}
                   onToggleBrand={handleToggleBrand}
+                  onBrandSwitch={handleBrandSwitch}
                   onSyncIntervalChange={setSyncInterval}
                   onShowSysInfoChange={handleShowSysInfoChange}
                   showSysInfo={showSysInfo}
@@ -729,7 +902,7 @@ export default function App() {
                     selectedBookmarkId={selectedBookmark?.id ?? null}
                     onSelectBookmark={handleSelectBookmark}
                   />
-                ) : brandMode === 'editor' ? (
+                ) : brandMode === 'editor' || brandMode === 'draw' ? (
                   <div className="panel-empty-note" />
                 ) : (
                   <FeedPanel
@@ -753,7 +926,7 @@ export default function App() {
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(1, e)} />}
             </>
-          ) : brandMode !== 'editor' ? (
+          ) : (brandMode !== 'editor' && brandMode !== 'draw') ? (
             <div className="panel-strip" onClick={() => setFeedPanelOpen(true)} title="Ouvrir le panneau Feed (2)">
               <span className="panel-strip-icon">☰</span>
             </div>
@@ -769,6 +942,8 @@ export default function App() {
                 />
               ) : brandMode === 'editor' ? (
                 <SuperEditor doc={selectedDoc} onUpdateContent={handleUpdateDocContent} onAddDoc={handleAddDoc} />
+              ) : brandMode === 'draw' ? (
+                <SuperDraw />
               ) : brandMode === 'bookmark' ? (
                 <BookmarkReader
                   bookmark={selectedBookmark}
@@ -807,6 +982,7 @@ export default function App() {
             </div>
           )}
         </div>
+        </>
       )}
       <UpgradeModal />
       {syncError && (

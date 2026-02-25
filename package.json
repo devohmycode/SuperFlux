@@ -42,10 +42,12 @@
     "framer-motion": "^12.34.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.563.0",
+    "mammoth": "^1.11.0",
     "motion": "^12.34.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
     "tailwind-merge": "^3.4.0",
     "tippy.js": "^6.3.7"
   },

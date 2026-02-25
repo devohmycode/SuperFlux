@@ -626,6 +626,93 @@ async fn open_auth_window(_url: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Pandoc integration ───────────────────────────────────────────────
+
+#[tauri::command]
+fn pandoc_check() -> Result<String, String> {
+    let output = std::process::Command::new("pandoc")
+        .arg("--version")
+        .output()
+        .map_err(|e| format!("pandoc not found: {e}"))?;
+    if !output.status.success() {
+        return Err("pandoc exited with error".to_string());
+    }
+    let version = String::from_utf8_lossy(&output.stdout);
+    let first_line = version.lines().next().unwrap_or("pandoc");
+    Ok(first_line.to_string())
+}
+
+#[tauri::command]
+fn pandoc_import(base64_data: String, filename: String) -> Result<String, String> {
+    let bytes = STANDARD.decode(&base64_data)
+        .map_err(|e| format!("base64 decode error: {e}"))?;
+
+    let tmp_dir = std::env::temp_dir().join("superflux_pandoc");
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    let input_path = tmp_dir.join(&filename);
+    std::fs::write(&input_path, &bytes)
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+
+    let output = std::process::Command::new("pandoc")
+        .arg(input_path.to_str().unwrap())
+        .arg("-t").arg("html")
+        .arg("--wrap=none")
+        .output()
+        .map_err(|e| format!("pandoc execution failed: {e}"))?;
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(&input_path);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("pandoc error: {stderr}"));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[tauri::command]
+fn pandoc_export(html_content: String, format: String) -> Result<String, String> {
+    let tmp_dir = std::env::temp_dir().join("superflux_pandoc");
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    let input_path = tmp_dir.join("export_input.html");
+    let ext = match format.as_str() {
+        "docx" => "docx",
+        "pdf" => "pdf",
+        other => return Err(format!("Unsupported format: {other}")),
+    };
+    let output_path = tmp_dir.join(format!("export_output.{ext}"));
+
+    std::fs::write(&input_path, &html_content)
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+
+    let output = std::process::Command::new("pandoc")
+        .arg(input_path.to_str().unwrap())
+        .arg("-f").arg("html")
+        .arg("-t").arg(&format)
+        .arg("-o").arg(output_path.to_str().unwrap())
+        .output()
+        .map_err(|e| format!("pandoc execution failed: {e}"))?;
+
+    let _ = std::fs::remove_file(&input_path);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let _ = std::fs::remove_file(&output_path);
+        return Err(format!("pandoc error: {stderr}"));
+    }
+
+    let result_bytes = std::fs::read(&output_path)
+        .map_err(|e| format!("Failed to read output file: {e}"))?;
+    let _ = std::fs::remove_file(&output_path);
+
+    Ok(STANDARD.encode(&result_bytes))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -633,7 +720,7 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window, pandoc_check, pandoc_import, pandoc_export])
         .setup(|_app| {
             #[cfg(not(target_os = "android"))]
             {

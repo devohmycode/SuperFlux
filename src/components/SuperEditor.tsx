@@ -27,8 +27,9 @@ import {
   List, ListOrdered, ListTodo, Quote, Minus, FileCode,
   Link as LinkIcon, Unlink, Image as ImageIcon,
   Undo2, Redo2, GripVertical,
-  FilePlus, FolderOpen, Download, ChevronDown,
+  FilePlus, FolderOpen, Download, ChevronDown, FileInput, FileOutput,
 } from 'lucide-react';
+import { importWithPandoc, exportWithPandoc } from '../services/pandocService';
 
 const lowlight = createLowlight(all);
 
@@ -146,12 +147,15 @@ function ToolSep() {
 }
 
 // ─── File menu dropdown ───
-function FileMenu({ onNew, onOpen, onDownload }: {
+function FileMenu({ onNew, onOpen, onDownload, onImport, onExport }: {
   onNew: () => void;
   onOpen: () => void;
   onDownload: () => void;
+  onImport: () => void;
+  onExport: (format: 'docx' | 'pdf') => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [exportSub, setExportSub] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -161,6 +165,10 @@ function FileMenu({ onNew, onOpen, onDownload }: {
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setExportSub(false);
   }, [open]);
 
   return (
@@ -181,6 +189,31 @@ function FileMenu({ onNew, onOpen, onDownload }: {
             <span>Ouvrir</span>
             <kbd>Ctrl+O</kbd>
           </button>
+          <div className="super-editor-filemenu-divider" />
+          <button className="super-editor-filemenu-item" onClick={() => { onImport(); setOpen(false); }}>
+            <FileInput size={14} />
+            <span>Importer</span>
+            <kbd>.docx .pdf</kbd>
+          </button>
+          <div
+            className="super-editor-filemenu-item super-editor-filemenu-submenu-trigger"
+            onMouseEnter={() => setExportSub(true)}
+            onMouseLeave={() => setExportSub(false)}
+          >
+            <FileOutput size={14} />
+            <span>Exporter</span>
+            <ChevronDown size={12} style={{ transform: 'rotate(-90deg)', marginLeft: 'auto' }} />
+            {exportSub && (
+              <div className="super-editor-filemenu-submenu">
+                <button className="super-editor-filemenu-item" onClick={() => { onExport('docx'); setOpen(false); }}>
+                  <span>Word (.docx)</span>
+                </button>
+                <button className="super-editor-filemenu-item" onClick={() => { onExport('pdf'); setOpen(false); }}>
+                  <span>PDF (.pdf)</span>
+                </button>
+              </div>
+            )}
+          </div>
           <div className="super-editor-filemenu-divider" />
           <button className="super-editor-filemenu-item" onClick={() => { onDownload(); setOpen(false); }}>
             <Download size={14} />
@@ -243,6 +276,8 @@ export function SuperEditor({ doc, onUpdateContent, onAddDoc }: SuperEditorProps
   }, [doc?.id, doc?.content, editor]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const handleNew = useCallback(() => {
     if (onAddDoc) onAddDoc();
@@ -294,6 +329,42 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
     URL.revokeObjectURL(url);
   }, [editor, doc?.title]);
 
+  const handleImport = useCallback(() => {
+    importInputRef.current?.click();
+  }, []);
+
+  const handleImportChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+    setImportError(null);
+    try {
+      const html = await importWithPandoc(file);
+      editor.commands.setContent(html);
+      if (doc && onUpdateContent) onUpdateContent(doc.id, editor.getHTML());
+    } catch (err: any) {
+      setImportError(err?.message || 'Erreur lors de l\'import');
+    }
+    e.target.value = '';
+  }, [editor, doc, onUpdateContent]);
+
+  const handleExport = useCallback(async (format: 'docx' | 'pdf') => {
+    if (!editor) return;
+    setImportError(null);
+    try {
+      const html = editor.getHTML();
+      const blob = await exportWithPandoc(html, format);
+      const title = doc?.title || 'supereditor-document';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/[^a-zA-Z0-9-_ ]/g, '')}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setImportError(err?.message || 'Erreur lors de l\'export');
+    }
+  }, [editor, doc?.title]);
+
   // Keyboard shortcuts for file menu
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -320,10 +391,17 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".docx,.pdf"
+        style={{ display: 'none' }}
+        onChange={handleImportChange}
+      />
       {/* Toolbar */}
       <div className="super-editor-toolbar">
         <div className="super-editor-toolbar-row">
-          <FileMenu onNew={handleNew} onOpen={handleOpen} onDownload={handleDownload} />
+          <FileMenu onNew={handleNew} onOpen={handleOpen} onDownload={handleDownload} onImport={handleImport} onExport={handleExport} />
           <ToolSep />
           <ToolBtn icon={Bold} label="Gras" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
           <ToolBtn icon={Italic} label="Italique" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
@@ -387,6 +465,13 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
         </DragHandle>
         <EditorContent editor={editor} className="super-editor-content" />
       </div>
+
+      {/* Import/Export error toast */}
+      {importError && (
+        <div className="super-editor-toast" onClick={() => setImportError(null)}>
+          <span>⚠ {importError}</span>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="super-editor-footer">
