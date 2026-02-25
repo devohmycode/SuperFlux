@@ -4,6 +4,13 @@ import { FeedPanel } from './components/FeedPanel';
 import { ReaderPanel } from './components/ReaderPanel';
 import { NotePanel, type Note } from './components/NotePanel';
 import { NoteEditor } from './components/NoteEditor';
+import { SuperEditor } from './components/SuperEditor';
+import { type EditorDoc, loadEditorDocs, saveEditorDocs, loadEditorFolders, saveEditorFolders } from './components/EditorFileList';
+import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
+import { BookmarkPanel } from './components/BookmarkPanel';
+import { BookmarkReader } from './components/BookmarkReader';
+import type { WebBookmark } from './services/bookmarkService';
+import { toggleBookmarkRead, addBookmark } from './services/bookmarkService';
 import { ResizeHandle } from './components/ResizeHandle';
 import { TitleBar } from './components/TitleBar';
 import { useResizablePanels } from './hooks/useResizablePanels';
@@ -86,7 +93,8 @@ export default function App() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showReadLater, setShowReadLater] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark'>('flux');
+  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor'>('flux');
+  const [searchQuery, setSearchQuery] = useState('');
   const [brandTransition, setBrandTransition] = useState(false);
   const [syncInterval, setSyncInterval] = useState(getSyncInterval);
   const [pinnedItems, setPinnedItems] = useState<PinEntry[]>(getPinnedItems);
@@ -126,15 +134,150 @@ export default function App() {
     catch { /* ignore */ }
   }, [noteFolders]);
 
+  // ── Editor documents state (SuperEditor mode) ──
+  const [editorDocs, setEditorDocs] = useState<EditorDoc[]>(loadEditorDocs);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [editorFolders, setEditorFolders] = useState<string[]>(loadEditorFolders);
+  const [selectedEditorFolder, setSelectedEditorFolder] = useState<string | null>(null);
+
+  useEffect(() => { saveEditorDocs(editorDocs); }, [editorDocs]);
+  useEffect(() => { saveEditorFolders(editorFolders); }, [editorFolders]);
+
+  const selectedDoc = useMemo(() =>
+    editorDocs.find(d => d.id === selectedDocId) ?? null,
+  [editorDocs, selectedDocId]);
+
+  // Debounce timer for Supabase content updates
+  const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Bookmark reader state (SuperBookmark mode) ──
+  const [selectedBookmark, setSelectedBookmark] = useState<WebBookmark | null>(null);
+
+  const handleSelectBookmark = useCallback((bk: WebBookmark) => {
+    setSelectedBookmark(bk);
+  }, []);
+
+  const handleBookmarkMarkRead = useCallback((id: string) => {
+    if (!user) return;
+    setSelectedBookmark(prev => prev && prev.id === id ? { ...prev, is_read: true } : prev);
+    toggleBookmarkRead(user.id, id, true);
+  }, [user]);
+
+  const handleAddBookmark = useCallback(async (url: string) => {
+    if (!user) return;
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const bk = await addBookmark(user.id, {
+      id,
+      url,
+      title: url,
+      excerpt: null,
+      image: null,
+      favicon: null,
+      author: null,
+      site_name: null,
+      tags: [],
+      note: null,
+      is_read: false,
+      source: 'desktop' as const,
+    });
+    if (bk) {
+      setSelectedBookmark(bk);
+    }
+  }, [user]);
+
+  const handleAddDoc = useCallback(() => {
+    const doc: EditorDoc = {
+      id: crypto.randomUUID(),
+      title: 'Sans titre',
+      content: '',
+      folder: selectedEditorFolder ?? undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setEditorDocs(prev => [doc, ...prev]);
+    setSelectedDocId(doc.id);
+    if (user) upsertEditorDoc(user.id, { id: doc.id, title: doc.title, content: doc.content, folder: doc.folder });
+  }, [user, selectedEditorFolder]);
+
+  const handleDeleteDoc = useCallback((id: string) => {
+    setEditorDocs(prev => prev.filter(d => d.id !== id));
+    setSelectedDocId(prev => prev === id ? null : prev);
+    if (user) removeEditorDoc(user.id, id);
+  }, [user]);
+
+  const handleRenameDoc = useCallback((id: string, title: string) => {
+    setEditorDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, title, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateEditorDocMeta(user.id, id, { title });
+  }, [user]);
+
+  const handleUpdateDocContent = useCallback((id: string, content: string) => {
+    setEditorDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, content, updatedAt: new Date().toISOString() } : d
+    ));
+    // Debounce Supabase content update (1s)
+    if (user) {
+      if (contentSaveTimerRef.current) clearTimeout(contentSaveTimerRef.current);
+      contentSaveTimerRef.current = setTimeout(() => {
+        updateEditorDocContent(user.id, id, content);
+      }, 1000);
+    }
+  }, [user]);
+
+  // ── Editor folder handlers ──
+  const handleCreateEditorFolder = useCallback((name: string) => {
+    setEditorFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameEditorFolder = useCallback((oldName: string, newName: string) => {
+    setEditorFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setEditorDocs(prev => prev.map(d => d.folder === oldName ? { ...d, folder: newName } : d));
+    if (selectedEditorFolder === oldName) setSelectedEditorFolder(newName);
+    // Update folder on all affected docs in Supabase
+    if (user) {
+      editorDocs.filter(d => d.folder === oldName).forEach(d => {
+        updateEditorDocMeta(user.id, d.id, { folder: newName });
+      });
+    }
+  }, [selectedEditorFolder, user, editorDocs]);
+
+  const handleDeleteEditorFolder = useCallback((name: string) => {
+    setEditorFolders(prev => prev.filter(f => f !== name));
+    setEditorDocs(prev => prev.map(d => d.folder === name ? { ...d, folder: undefined } : d));
+    if (selectedEditorFolder === name) setSelectedEditorFolder(null);
+    // Move docs out of folder in Supabase
+    if (user) {
+      editorDocs.filter(d => d.folder === name).forEach(d => {
+        updateEditorDocMeta(user.id, d.id, { folder: null });
+      });
+    }
+  }, [selectedEditorFolder, user, editorDocs]);
+
+  const handleMoveDocToFolder = useCallback((docId: string, folder: string | undefined) => {
+    setEditorDocs(prev => prev.map(d =>
+      d.id === docId ? { ...d, folder, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateEditorDocMeta(user.id, docId, { folder: folder ?? null });
+  }, [user]);
+
   const selectedNote = useMemo(() =>
     notes.find(n => n.id === selectedNoteId) ?? null,
   [notes, selectedNoteId]);
 
-  // Notes filtered by selected folder
+  // Notes filtered by selected folder + search query
   const filteredNotes = useMemo(() => {
-    if (selectedNoteFolder === null) return notes;
-    return notes.filter(n => n.folder === selectedNoteFolder);
-  }, [notes, selectedNoteFolder]);
+    let result = selectedNoteFolder === null ? notes : notes.filter(n => n.folder === selectedNoteFolder);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(n =>
+        (n.title && n.title.toLowerCase().includes(q)) ||
+        (n.content && n.content.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [notes, selectedNoteFolder, searchQuery]);
 
   const handleAddNote = useCallback(() => {
     const newNote: Note = {
@@ -188,13 +331,26 @@ export default function App() {
     setIsCollapsed(prev => !prev);
   }, []);
 
-  const { widths, handleMouseDown, containerRef } = useResizablePanels({
+  const { widths, setWidths, handleMouseDown, containerRef } = useResizablePanels({
     panels: [
       { minWidth: 200, maxWidth: 800, defaultWidth: 18 },
       { minWidth: 300, maxWidth: 1200, defaultWidth: 32 },
       { minWidth: 400, maxWidth: 2400, defaultWidth: 50 },
     ],
   });
+
+  // Adjust panel widths when switching brand modes
+  useEffect(() => {
+    if (brandMode === 'note') {
+      setWidths([18, 57, 25]);
+    } else if (brandMode === 'editor') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else {
+      setFeedPanelOpen(true);
+      setWidths([18, 32, 50]);
+    }
+  }, [brandMode, setWidths]);
 
   // Track previous user to detect login/logout
   const prevUserRef = useRef<string | null>(null);
@@ -203,9 +359,22 @@ export default function App() {
     const userId = user?.id ?? null;
     SyncService.setUserId(userId);
 
-    // On login: run fullSync
+    // On login: run fullSync + fetch editor docs from Supabase
     if (userId && prevUserRef.current !== userId) {
       SyncService.fullSync().catch(err => console.error('[sync] fullSync failed', err));
+      fetchEditorDocs(userId).then(rows => {
+        if (rows.length > 0) {
+          const docs: EditorDoc[] = rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            folder: r.folder ?? undefined,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          }));
+          setEditorDocs(docs);
+        }
+      }).catch(err => console.error('[editor-docs] fetch failed', err));
     }
     prevUserRef.current = userId;
   }, [user]);
@@ -277,6 +446,16 @@ export default function App() {
     if (selectedSource) return store.getItemsBySource(selectedSource);
     return store.getAllItems();
   }, [selectedFeedId, selectedSource, showFavorites, showReadLater, store]);
+
+  // Apply search filter to items
+  const searchedItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter(item =>
+      item.title.toLowerCase().includes(q) ||
+      (item.summary && item.summary.toLowerCase().includes(q))
+    );
+  }, [items, searchQuery]);
 
   const allItems = useMemo(() => store.getAllItems(), [store]);
 
@@ -396,8 +575,10 @@ export default function App() {
     setBrandTransition(true);
     // At the midpoint of the animation, switch the mode
     setTimeout(() => {
-      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux');
+      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : 'flux');
       setSelectedNoteId(null);
+      setSelectedBookmark(null);
+      setSearchQuery('');
     }, 600);
     // Close the transition overlay after the animation completes
     setTimeout(() => {
@@ -459,7 +640,7 @@ export default function App() {
 
           {sourcePanelOpen ? (
             <>
-              <div className="panel panel-source" style={allOpen ? { width: `${widths[0]}%` } : { flex: 1 }}>
+              <div className="panel panel-source" style={(allOpen || (brandMode === 'editor' && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
                 <SourcePanel
                   categories={store.categories}
                   selectedFeedId={selectedFeedId}
@@ -505,6 +686,22 @@ export default function App() {
                   onDeleteNoteFolder={handleDeleteNoteFolder}
                   onMoveNoteToFolder={handleMoveNoteToFolder}
                   onDeleteNote={handleDeleteNote}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  editorDocs={editorDocs}
+                  editorFolders={editorFolders}
+                  selectedDocId={selectedDocId}
+                  selectedEditorFolder={selectedEditorFolder}
+                  onSelectDoc={setSelectedDocId}
+                  onSelectEditorFolder={setSelectedEditorFolder}
+                  onAddDoc={handleAddDoc}
+                  onDeleteDoc={handleDeleteDoc}
+                  onRenameDoc={handleRenameDoc}
+                  onCreateEditorFolder={handleCreateEditorFolder}
+                  onRenameEditorFolder={handleRenameEditorFolder}
+                  onDeleteEditorFolder={handleDeleteEditorFolder}
+                  onMoveDocToFolder={handleMoveDocToFolder}
+                  onAddBookmark={handleAddBookmark}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -528,11 +725,16 @@ export default function App() {
                     onUpdateNote={handleUpdateNote}
                   />
                 ) : brandMode === 'bookmark' ? (
+                  <BookmarkPanel
+                    selectedBookmarkId={selectedBookmark?.id ?? null}
+                    onSelectBookmark={handleSelectBookmark}
+                  />
+                ) : brandMode === 'editor' ? (
                   <div className="panel-empty-note" />
                 ) : (
                   <FeedPanel
                     categories={store.categories}
-                    items={items}
+                    items={searchedItems}
                     selectedFeedId={selectedFeedId}
                     selectedSource={selectedSource}
                     selectedItemId={selectedItem?.id || null}
@@ -551,11 +753,11 @@ export default function App() {
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(1, e)} />}
             </>
-          ) : (
+          ) : brandMode !== 'editor' ? (
             <div className="panel-strip" onClick={() => setFeedPanelOpen(true)} title="Ouvrir le panneau Feed (2)">
               <span className="panel-strip-icon">☰</span>
             </div>
-          )}
+          ) : null}
 
           {readerPanelOpen ? (
             <div className="panel panel-reader" style={{ flex: 1 }}>
@@ -565,8 +767,13 @@ export default function App() {
                   onUpdateNote={handleUpdateNote}
                   onClose={() => setSelectedNoteId(null)}
                 />
+              ) : brandMode === 'editor' ? (
+                <SuperEditor doc={selectedDoc} onUpdateContent={handleUpdateDocContent} onAddDoc={handleAddDoc} />
               ) : brandMode === 'bookmark' ? (
-                <div className="panel-empty-note" />
+                <BookmarkReader
+                  bookmark={selectedBookmark}
+                  onMarkRead={handleBookmarkMarkRead}
+                />
               ) : (
                 <ReaderPanel
                   item={selectedItem}

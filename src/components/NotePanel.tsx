@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
+import GradientText from './GradientText';
 import { NoteStickyBoard } from './NoteStickyBoard';
 
 export interface Note {
@@ -15,6 +16,8 @@ export interface Note {
   stickyRotation?: number;
   stickyZIndex?: number;
   stickyColor?: string;
+  stickyWidth?: number;
+  stickyHeight?: number;
 }
 
 interface NotePanelProps {
@@ -32,7 +35,7 @@ function formatNoteDate(iso: string): string {
 }
 
 export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDeleteNote, onUpdateNote }: NotePanelProps) {
-  const [viewMode, setViewMode] = useState<'cards' | 'board'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'board'>('board');
 
   const handleDelete = useCallback((e: React.MouseEvent, noteId: string) => {
     e.stopPropagation();
@@ -43,7 +46,15 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
     <div className="note-panel">
       <div className="note-panel-header">
         <div className="note-panel-title-row">
-          <h2 className="note-panel-title">Notes</h2>
+          <h2 className="note-panel-title">
+            <GradientText
+              colors={["#5227FF","#FF9FFC","#B19EEF"]}
+              animationSpeed={8}
+              showBorder={false}
+            >
+              Notes
+            </GradientText>
+          </h2>
           {notes.length > 0 && (
             <span className="note-panel-count">{notes.length} note{notes.length > 1 ? 's' : ''}</span>
           )}
@@ -62,9 +73,6 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
             onClick={() => setViewMode('board')}
           >
             ▤
-          </button>
-          <button className="feed-action-btn" title="Nouvelle note" onClick={onAddNote}>
-            +
           </button>
         </div>
       </div>

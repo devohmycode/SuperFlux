@@ -11,6 +11,7 @@ import { getProviderConfig, saveProviderConfig, clearProviderConfig, ProviderSyn
 import { getTtsConfig, saveTtsConfig, speak as ttsSpeak, stop as ttsStop, type TtsEngine, type TtsConfig } from '../services/ttsService';
 import { getTranslationConfig, saveTranslationConfig, LANGUAGES } from '../services/translationService';
 import { usePro } from '../contexts/ProContext';
+import { PalettePickerInline } from './PalettePicker';
 import { PRO_LIMITS } from '../services/licenseService';
 import { getRSSHubInstance, setRSSHubInstance as setRSSHubInstanceConfig } from '../services/rsshubService';
 
@@ -74,11 +75,11 @@ function applyWindowEffect(effect: WindowEffect, opacity: number) {
   // Debounce the native effect call (triggers a resize nudge for DWM repaint)
   if (_effectTimer) clearTimeout(_effectTimer);
   _effectTimer = setTimeout(() => {
-    const isDark = document.documentElement.classList.contains('dark');
-    const isSepia = document.documentElement.classList.contains('sepia');
+    const isAmoled = document.documentElement.classList.contains('amoled');
+    const isDark = isAmoled || document.documentElement.classList.contains('dark');
     let r: number, g: number, b: number;
-    if (isDark) { r = 20; g = 20; b = 20; }
-    else if (isSepia) { r = 210; g = 195; b = 170; }
+    if (isAmoled) { r = 0; g = 0; b = 0; }
+    else if (isDark) { r = 20; g = 20; b = 20; }
     else { r = 240; g = 240; b = 240; }
     const alpha = Math.round((opacity / 100) * 200);
 
@@ -559,6 +560,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     </div>
                   </>
                 )}
+
+                <label className="settings-label" style={{ marginTop: 12 }}>Palette de couleurs</label>
+                <PalettePickerInline />
 
                 <label className="settings-label" style={{ marginTop: 12 }}>Infos système dans la barre de titre</label>
                 <div className="settings-format-toggle">

@@ -106,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'superflux_highlights',
       'superflux_notes',
       'superflux_note_folders',
+      'superflux_editor_docs',
+      'superflux_editor_folders',
       'superflux_last_sync',
     ];
     userDataKeys.forEach(key => localStorage.removeItem(key));

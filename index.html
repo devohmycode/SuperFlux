@@ -11,11 +11,15 @@
     <script>
       (function() {
         var t = localStorage.getItem('theme');
-        if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        if (t === 'amoled') {
+          document.documentElement.classList.add('amoled');
+        } else if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark');
         } else if (t === 'sepia') {
           document.documentElement.classList.add('sepia');
         }
+        var p = localStorage.getItem('superflux_palette');
+        if (p) document.documentElement.setAttribute('data-palette', p);
       })();
     </script>
   </head>

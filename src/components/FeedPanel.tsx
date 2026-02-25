@@ -5,8 +5,11 @@ import MorphingPageDots from './ui/morphing-page-dots';
 import { usePro } from '../contexts/ProContext';
 import { summarizeDigest } from '../services/llmService';
 import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
+import GradientText from './GradientText';
+import SpotlightCard from './SpotlightCard';
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE_NORMAL = 10;
+const ITEMS_PER_PAGE_COMPACT = 20;
 
 type ViewMode = 'normal' | 'compact' | 'cards';
 
@@ -116,6 +119,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
+  const itemsPerPage = compact ? ITEMS_PER_PAGE_COMPACT : ITEMS_PER_PAGE_NORMAL;
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: FeedItem } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +188,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
 
   // ── Pagination ──
   const [currentPage, setCurrentPage] = useState(0);
-  const totalPages = Math.max(1, Math.ceil(items.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage));
 
   // Reset to page 0 and digest when items source changes
   const itemsKey = `${selectedFeedId}-${selectedSource}-${showFavorites}-${showReadLater}`;
@@ -201,9 +205,9 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   }, [currentPage, totalPages]);
 
   const paginatedItems = useMemo(() => {
-    const start = currentPage * ITEMS_PER_PAGE;
-    return items.slice(start, start + ITEMS_PER_PAGE);
-  }, [items, currentPage]);
+    const start = currentPage * itemsPerPage;
+    return items.slice(start, start + itemsPerPage);
+  }, [items, currentPage, itemsPerPage]);
 
   const paginatedGroups = useMemo(() => groupByTime(paginatedItems), [paginatedItems]);
 
@@ -327,7 +331,15 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
     <div className={`feed-panel ${compact ? 'compact' : ''}`}>
       <div className="feed-panel-header">
         <div className="feed-panel-title-row">
-          <h2 className="feed-panel-title">{title}</h2>
+          <h2 className="feed-panel-title">
+            <GradientText
+              colors={["#5227FF","#FF9FFC","#B19EEF"]}
+              animationSpeed={8}
+              showBorder={false}
+            >
+              {title}
+            </GradientText>
+          </h2>
           {unreadCount > 0 && (
             <span className="feed-panel-unread">{unreadCount} non lus</span>
           )}
@@ -502,8 +514,8 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
           /* ─── Reorderable Flat List (favorites / read later) ─── */
           <div className="feed-group">
             {paginatedItems.map((item, idx) => (
+              <SpotlightCard key={item.id} className="feed-card-spotlight" spotlightColor="rgba(0, 229, 255, 0.2)">
               <motion.article
-                key={item.id}
                 className={`feed-card ${selectedItemId === item.id ? 'active' : ''} ${item.isRead ? 'read' : ''} ${dragItemId === item.id ? 'dragging' : ''} ${dropTargetId === item.id ? 'drop-over' : ''}`}
                 onClick={() => onSelectItem(item)}
                 onContextMenu={(e) => handleContextMenu(e, item)}
@@ -554,6 +566,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                   </>
                 )}
               </motion.article>
+              </SpotlightCard>
             ))}
           </div>
         ) : (
@@ -569,8 +582,8 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                 {group.label}
               </motion.div>
               {group.items.map((item, idx) => (
+                <SpotlightCard key={item.id} className="feed-card-spotlight" spotlightColor="rgba(0, 229, 255, 0.2)">
                 <motion.article
-                  key={item.id}
                   className={`feed-card ${selectedItemId === item.id ? 'active' : ''} ${item.isRead ? 'read' : ''}`}
                   onClick={() => onSelectItem(item)}
                   onContextMenu={(e) => handleContextMenu(e, item)}
@@ -614,6 +627,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                     </>
                   )}
                 </motion.article>
+                </SpotlightCard>
               ))}
             </div>
           ))
@@ -629,7 +643,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
             onChange={setCurrentPage}
           />
           <span className="feed-panel-pagination__info">
-            {currentPage * ITEMS_PER_PAGE + 1}–{Math.min((currentPage + 1) * ITEMS_PER_PAGE, items.length)} / {items.length}
+            {currentPage * itemsPerPage + 1}–{Math.min((currentPage + 1) * itemsPerPage, items.length)} / {items.length}
           </span>
         </div>
       )}

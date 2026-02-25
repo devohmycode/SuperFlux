@@ -34,6 +34,13 @@ function randomRotation() {
 
 // ── Single Sticky Note ──
 
+const MIN_STICKY_W = 140;
+const MAX_STICKY_W = 500;
+const MIN_STICKY_H = 120;
+const MAX_STICKY_H = 500;
+const DEFAULT_STICKY_W = 200;
+const DEFAULT_STICKY_H = 180;
+
 interface StickyNoteItemProps {
   note: Note;
   isSelected: boolean;
@@ -42,28 +49,36 @@ interface StickyNoteItemProps {
   onDragEnd: (x: number, y: number) => void;
   onContentUpdate: (content: string) => void;
   onBringToFront: () => void;
+  onResizeEnd: (w: number, h: number) => void;
   boardRef: React.RefObject<HTMLDivElement | null>;
 }
 
 function StickyNoteItem({
   note, isSelected, onSelect, onDelete, onDragEnd,
-  onContentUpdate, onBringToFront, boardRef,
+  onContentUpdate, onBringToFront, onResizeEnd, boardRef,
 }: StickyNoteItemProps) {
   const color = note.stickyColor || 'yellow';
   const style = STICKY_COLORS[color] || STICKY_COLORS.yellow;
   const rotation = note.stickyRotation ?? 0;
 
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(note.content);
   const [position, setPosition] = useState({ x: note.stickyX ?? 40, y: note.stickyY ?? 40 });
+  const [size, setSize] = useState({ w: note.stickyWidth ?? DEFAULT_STICKY_W, h: note.stickyHeight ?? DEFAULT_STICKY_H });
   const dragOffset = useRef({ x: 0, y: 0 });
+  const resizeStart = useRef({ mouseX: 0, mouseY: 0, w: 0, h: 0 });
   const noteRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setPosition({ x: note.stickyX ?? 40, y: note.stickyY ?? 40 });
   }, [note.stickyX, note.stickyY]);
+
+  useEffect(() => {
+    setSize({ w: note.stickyWidth ?? DEFAULT_STICKY_W, h: note.stickyHeight ?? DEFAULT_STICKY_H });
+  }, [note.stickyWidth, note.stickyHeight]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -90,10 +105,10 @@ function StickyNoteItem({
     const newX = e.clientX - boardRect.left - dragOffset.current.x;
     const newY = e.clientY - boardRect.top - dragOffset.current.y;
     setPosition({
-      x: Math.max(0, Math.min(newX, boardRect.width - 200)),
-      y: Math.max(0, Math.min(newY, boardRect.height - 200)),
+      x: Math.max(0, Math.min(newX, boardRect.width - size.w)),
+      y: Math.max(0, Math.min(newY, boardRect.height - size.h)),
     });
-  }, [isDragging, boardRef]);
+  }, [isDragging, boardRef, size]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (!isDragging) return;
@@ -101,6 +116,33 @@ function StickyNoteItem({
     setIsDragging(false);
     onDragEnd(position.x, position.y);
   }, [isDragging, position, onDragEnd]);
+
+  // ── Resize handlers ──
+  const handleResizePointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: size.w, h: size.h };
+    setIsResizing(true);
+    onBringToFront();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [size, onBringToFront]);
+
+  const handleResizePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isResizing) return;
+    const dx = e.clientX - resizeStart.current.mouseX;
+    const dy = e.clientY - resizeStart.current.mouseY;
+    setSize({
+      w: Math.max(MIN_STICKY_W, Math.min(MAX_STICKY_W, resizeStart.current.w + dx)),
+      h: Math.max(MIN_STICKY_H, Math.min(MAX_STICKY_H, resizeStart.current.h + dy)),
+    });
+  }, [isResizing]);
+
+  const handleResizePointerUp = useCallback((e: React.PointerEvent) => {
+    if (!isResizing) return;
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsResizing(false);
+    onResizeEnd(size.w, size.h);
+  }, [isResizing, size, onResizeEnd]);
 
   const handleSave = () => {
     onContentUpdate(editContent);
@@ -115,17 +157,19 @@ function StickyNoteItem({
   return (
     <div
       ref={noteRef}
-      className={`sticky-note ${isDragging ? 'sticky-note--dragging' : ''} ${isSelected ? 'sticky-note--selected' : ''}`}
+      className={`sticky-note ${isDragging ? 'sticky-note--dragging' : ''} ${isResizing ? 'sticky-note--resizing' : ''} ${isSelected ? 'sticky-note--selected' : ''}`}
       style={{
         left: position.x,
         top: position.y,
+        width: size.w,
+        minHeight: size.h,
         zIndex: note.stickyZIndex ?? 1,
         backgroundColor: style.bg,
         boxShadow: isDragging
           ? '0 12px 40px rgba(0,0,0,0.25)'
           : `0 4px 16px ${style.shadow}`,
-        transform: `rotate(${isDragging ? 0 : rotation}deg) scale(${isDragging ? 1.05 : 1})`,
-        transition: isDragging
+        transform: `rotate(${(isDragging || isResizing) ? 0 : rotation}deg) scale(${isDragging ? 1.05 : 1})`,
+        transition: (isDragging || isResizing)
           ? 'box-shadow 0.2s, transform 0.1s'
           : 'box-shadow 0.2s, transform 0.3s ease-out',
       }}
@@ -195,8 +239,19 @@ function StickyNoteItem({
         )}
       </div>
 
-      {/* Folded corner */}
-      <div className="sticky-note-corner" />
+      {/* Resize handle */}
+      <div
+        className="sticky-note-resize"
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          <line x1="11" y1="1" x2="1" y2="11" stroke="rgba(0,0,0,0.15)" strokeWidth="1"/>
+          <line x1="11" y1="5" x2="5" y2="11" stroke="rgba(0,0,0,0.15)" strokeWidth="1"/>
+          <line x1="11" y1="9" x2="9" y2="11" stroke="rgba(0,0,0,0.15)" strokeWidth="1"/>
+        </svg>
+      </div>
     </div>
   );
 }
@@ -224,6 +279,10 @@ export function NoteStickyBoard({
 
   const handleContentUpdate = useCallback((noteId: string, content: string) => {
     onUpdateNote(noteId, { content });
+  }, [onUpdateNote]);
+
+  const handleResizeEnd = useCallback((noteId: string, w: number, h: number) => {
+    onUpdateNote(noteId, { stickyWidth: w, stickyHeight: h });
   }, [onUpdateNote]);
 
   const handleAddStickyNote = useCallback(() => {
@@ -296,6 +355,7 @@ export function NoteStickyBoard({
             onDragEnd={(x, y) => handleDragEnd(note.id, x, y)}
             onContentUpdate={(content) => handleContentUpdate(note.id, content)}
             onBringToFront={() => bringToFront(note.id)}
+            onResizeEnd={(w, h) => handleResizeEnd(note.id, w, h)}
             boardRef={boardRef}
           />
         ))}

@@ -12,8 +12,13 @@ import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
 import { PRO_LIMITS } from "../services/licenseService";
 import { isRSSHubUrl } from "../services/rsshubService";
+import { Input } from "@headlessui/react";
+import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
 import type { Note } from "./NotePanel";
+import { PalettePicker } from "./PalettePicker";
+import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
+import ShinyText from "./ShinyText";
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -42,7 +47,7 @@ interface SourcePanelProps {
   onDeleteFolder: (categoryId: string, path: string) => void;
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
   onClose?: () => void;
-  brandMode: 'flux' | 'note' | 'bookmark';
+  brandMode: 'flux' | 'note' | 'bookmark' | 'editor';
   onToggleBrand: () => void;
   onSyncIntervalChange?: (interval: number) => void;
   onShowSysInfoChange?: (show: boolean) => void;
@@ -61,6 +66,23 @@ interface SourcePanelProps {
   onDeleteNoteFolder?: (name: string) => void;
   onMoveNoteToFolder?: (noteId: string, folder: string | undefined) => void;
   onDeleteNote?: (noteId: string) => void;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  // Editor mode props
+  editorDocs?: import('./EditorFileList').EditorDoc[];
+  editorFolders?: string[];
+  selectedDocId?: string | null;
+  selectedEditorFolder?: string | null;
+  onSelectDoc?: (id: string) => void;
+  onSelectEditorFolder?: (folder: string | null) => void;
+  onAddDoc?: () => void;
+  onDeleteDoc?: (id: string) => void;
+  onRenameDoc?: (id: string, title: string) => void;
+  onCreateEditorFolder?: (name: string) => void;
+  onRenameEditorFolder?: (oldName: string, newName: string) => void;
+  onDeleteEditorFolder?: (name: string) => void;
+  onMoveDocToFolder?: (docId: string, folder: string | undefined) => void;
+  onAddBookmark?: (url: string) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -182,8 +204,28 @@ export function SourcePanel({
   onDeleteNoteFolder,
   onMoveNoteToFolder,
   onDeleteNote,
+  searchQuery = '',
+  onSearchChange,
+  editorDocs = [],
+  editorFolders = [],
+  selectedDocId = null,
+  selectedEditorFolder = null,
+  onSelectDoc,
+  onSelectEditorFolder,
+  onAddDoc,
+  onDeleteDoc,
+  onRenameDoc,
+  onCreateEditorFolder,
+  onRenameEditorFolder,
+  onDeleteEditorFolder,
+  onMoveDocToFolder,
+  onAddBookmark,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [bookmarkUrlOpen, setBookmarkUrlOpen] = useState(false);
+  const [bookmarkUrlValue, setBookmarkUrlValue] = useState('');
+  const bookmarkUrlRef = useRef<HTMLInputElement>(null);
 
   const totalFeeds = categories.reduce((sum, cat) => sum + cat.feeds.length, 0);
   const totalFolders = categories.reduce((sum, cat) => sum + cat.folders.length, 0);
@@ -445,7 +487,10 @@ export function SourcePanel({
   const renderFolderNode = (node: FolderNode, category: FeedCategory, depth: number) => {
     const folderKey = `${category.id}::${node.path}`;
     const dropKey = `folder::${category.id}::${node.path}`;
-    const folderFeeds = category.feeds.filter(f => f.folder === node.path);
+    const sq = searchQuery.toLowerCase();
+    const folderFeeds = category.feeds.filter(f =>
+      f.folder === node.path && (!sq || f.name.toLowerCase().includes(sq))
+    );
     const isExpanded = expandedFolders.has(folderKey);
     const isDropOver = dropTarget === dropKey && dragFeedId !== null;
     const headerIndent = FOLDER_BASE_INDENT + depth * INDENT_STEP;
@@ -529,7 +574,17 @@ export function SourcePanel({
         <div className="source-panel-brand">
           <span className="brand-icon">◈</span>
           <button className="brand-name-btn" onClick={onToggleBrand}>
-            {brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : 'SuperBookmark'}
+            <ShinyText
+              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : 'SuperBookmark'}
+              speed={2}
+              delay={0}
+              color="#787878"
+              shineColor="#ffffff"
+              spread={120}
+              direction="left"
+              yoyo={false}
+              pauseOnHover={false}
+            />
           </button>
           <AnimatedThemeToggler className="theme-toggle-btn" />
           {onClose && (
@@ -556,6 +611,24 @@ export function SourcePanel({
               onDeleteFolder={onDeleteNoteFolder}
               onMoveNoteToFolder={onMoveNoteToFolder}
               onDeleteNote={onDeleteNote}
+            />
+          ) : <div className="panel-empty-note" />
+        ) : brandMode === 'editor' ? (
+          onSelectDoc && onAddDoc && onDeleteDoc && onRenameDoc && onCreateEditorFolder && onRenameEditorFolder && onDeleteEditorFolder && onMoveDocToFolder && onSelectEditorFolder ? (
+            <EditorFileList
+              docs={editorDocs}
+              folders={editorFolders}
+              selectedDocId={selectedDocId}
+              selectedFolder={selectedEditorFolder}
+              onSelectDoc={onSelectDoc}
+              onSelectFolder={onSelectEditorFolder}
+              onAddDoc={onAddDoc}
+              onDeleteDoc={onDeleteDoc}
+              onRenameDoc={onRenameDoc}
+              onCreateFolder={onCreateEditorFolder}
+              onRenameFolder={onRenameEditorFolder}
+              onDeleteFolder={onDeleteEditorFolder}
+              onMoveDocToFolder={onMoveDocToFolder}
             />
           ) : <div className="panel-empty-note" />
         ) : brandMode === 'bookmark' ? (
@@ -595,7 +668,9 @@ export function SourcePanel({
 
         <div className="source-categories">
           {categories.map((category, catIdx) => {
-            const rootFeeds = category.feeds.filter(f => !f.folder);
+            const sq = searchQuery.toLowerCase();
+            const allCatFeeds = sq ? category.feeds.filter(f => f.name.toLowerCase().includes(sq)) : category.feeds;
+            const rootFeeds = allCatFeeds.filter(f => !f.folder);
             const folderTree = buildFolderTree(category.folders);
 
             return (
@@ -675,6 +750,32 @@ export function SourcePanel({
         )}
       </div>
 
+      {/* Search bar — visible on all pages */}
+      <div className="source-panel-search">
+        <span className="source-panel-search-icon">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <circle cx="7" cy="7" r="5" />
+            <line x1="11" y1="11" x2="14.5" y2="14.5" />
+          </svg>
+        </span>
+        <Input
+          type="text"
+          className="source-panel-search-input"
+          placeholder="Rechercher..."
+          value={searchQuery}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearchChange?.(e.target.value)}
+        />
+        {searchQuery && (
+          <button
+            className="source-panel-search-clear"
+            onClick={() => onSearchChange?.('')}
+            title="Effacer"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {brandMode === 'flux' && syncError && (
         <div className="sync-error-banner" title={syncError}>
           <span className="sync-error-icon">⚠</span>
@@ -682,7 +783,53 @@ export function SourcePanel({
         </div>
       )}
 
-      {brandMode === 'flux' && <div className="source-panel-footer">
+      {/* ── Bookmark URL input ── */}
+      <AnimatePresence>
+        {bookmarkUrlOpen && brandMode === 'bookmark' && (
+          <motion.div
+            className="bk-url-input-bar"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const url = bookmarkUrlValue.trim();
+                if (url) {
+                  onAddBookmark?.(url);
+                  setBookmarkUrlValue('');
+                  setBookmarkUrlOpen(false);
+                }
+              }}
+            >
+              <input
+                ref={bookmarkUrlRef}
+                type="url"
+                className="bk-url-input"
+                placeholder="https://..."
+                value={bookmarkUrlValue}
+                onChange={(e) => setBookmarkUrlValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setBookmarkUrlOpen(false);
+                    setBookmarkUrlValue('');
+                  }
+                }}
+              />
+              <button type="submit" className="bk-url-submit" disabled={!bookmarkUrlValue.trim()}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="2" y1="8" x2="14" y2="8" /><polyline points="9,3 14,8 9,13" />
+                </svg>
+              </button>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Footer ── */}
+      <div className="source-panel-footer">
         <SyncButton
           showLabel={false}
           onSync={onSync}
@@ -691,17 +838,31 @@ export function SourcePanel({
         />
         <button
           className="footer-btn footer-btn-add"
-          title="Ajouter un flux"
+          title={
+            brandMode === 'flux' ? 'Ajouter un flux' :
+            brandMode === 'note' ? 'Nouvelle note' :
+            brandMode === 'editor' ? 'Nouveau document' :
+            'Ajouter un bookmark'
+          }
           onClick={() => {
-            if (!isPro && totalFeeds >= PRO_LIMITS.maxFeeds) {
-              showUpgradeModal();
-            } else {
-              setIsAddModalOpen(true);
+            if (brandMode === 'flux') {
+              if (!isPro && totalFeeds >= PRO_LIMITS.maxFeeds) {
+                showUpgradeModal();
+              } else {
+                setIsAddModalOpen(true);
+              }
+            } else if (brandMode === 'note') {
+              onAddNote?.();
+            } else if (brandMode === 'editor') {
+              onAddDoc?.();
+            } else if (brandMode === 'bookmark') {
+              setBookmarkUrlOpen(prev => !prev);
+              setTimeout(() => bookmarkUrlRef.current?.focus(), 50);
             }
           }}
         >
           <span>+</span>
-          {!isPro && totalFeeds >= PRO_LIMITS.maxFeeds - 5 && (
+          {brandMode === 'flux' && !isPro && totalFeeds >= PRO_LIMITS.maxFeeds - 5 && (
             <span className="feed-unread" style={{ fontSize: '9px', marginLeft: 4 }}>
               {totalFeeds}/{PRO_LIMITS.maxFeeds}
             </span>
@@ -724,8 +885,29 @@ export function SourcePanel({
             </svg>
           </button>
         )}
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+          <button
+            className="palette-btn"
+            onClick={() => setPaletteOpen(prev => !prev)}
+            title="Palette de couleurs"
+          >
+            {(() => {
+              const p = getPaletteById(getStoredPaletteId());
+              const isDark = document.documentElement.classList.contains('dark') || document.documentElement.classList.contains('amoled');
+              const c = isDark ? p.dark : p.light;
+              return (
+                <span className="palette-btn-dots">
+                  <span className="palette-dot" style={{ background: c.accent }} />
+                  <span className="palette-dot" style={{ background: c.secondary }} />
+                  <span className="palette-dot" style={{ background: c.tertiary }} />
+                </span>
+              );
+            })()}
+          </button>
+          {paletteOpen && <PalettePicker onClose={() => setPaletteOpen(false)} />}
+        </div>
         <UserMenu />
-      </div>}
+      </div>
 
       <AddFeedModal
         isOpen={isAddModalOpen}
