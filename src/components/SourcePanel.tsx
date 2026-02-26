@@ -12,9 +12,9 @@ import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
 import { PRO_LIMITS } from "../services/licenseService";
 import { isRSSHubUrl } from "../services/rsshubService";
-import { Input } from "@headlessui/react";
 import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
+import { BookmarkSourceList } from "./BookmarkSourceList";
 import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
@@ -85,6 +85,14 @@ interface SourcePanelProps {
   onMoveDocToFolder?: (docId: string, folder: string | undefined) => void;
   onAddBookmark?: (url: string) => void;
   onReorderFeed?: (feedId: string, targetFeedId: string, position: 'before' | 'after') => void;
+  // Bookmark folder props
+  bookmarkFolders?: string[];
+  bookmarkFolderCounts?: Record<string, number>;
+  selectedBookmarkFolder?: string | null;
+  onSelectBookmarkFolder?: (folder: string | null) => void;
+  onCreateBookmarkFolder?: (name: string) => void;
+  onRenameBookmarkFolder?: (oldName: string, newName: string) => void;
+  onDeleteBookmarkFolder?: (name: string) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -208,7 +216,7 @@ export function SourcePanel({
   onMoveNoteToFolder,
   onDeleteNote,
   searchQuery = '',
-  onSearchChange,
+  onSearchChange: _onSearchChange,
   editorDocs = [],
   editorFolders = [],
   selectedDocId = null,
@@ -224,6 +232,13 @@ export function SourcePanel({
   onMoveDocToFolder,
   onAddBookmark,
   onReorderFeed,
+  bookmarkFolders,
+  bookmarkFolderCounts,
+  selectedBookmarkFolder,
+  onSelectBookmarkFolder,
+  onCreateBookmarkFolder,
+  onRenameBookmarkFolder,
+  onDeleteBookmarkFolder,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -678,7 +693,17 @@ export function SourcePanel({
               onMoveDocToFolder={onMoveDocToFolder}
             />
           ) : <div className="panel-empty-note" />
-        ) : brandMode === 'bookmark' || brandMode === 'draw' ? (
+        ) : brandMode === 'bookmark' ? (
+          <BookmarkSourceList
+            folders={bookmarkFolders ?? []}
+            folderCounts={bookmarkFolderCounts ?? {}}
+            selectedFolder={selectedBookmarkFolder ?? null}
+            onSelectFolder={onSelectBookmarkFolder ?? (() => {})}
+            onCreateFolder={onCreateBookmarkFolder ?? (() => {})}
+            onRenameFolder={onRenameBookmarkFolder ?? (() => {})}
+            onDeleteFolder={onDeleteBookmarkFolder ?? (() => {})}
+          />
+        ) : brandMode === 'draw' ? (
           <div className="panel-empty-note" />
         ) : (
         <>

@@ -154,7 +154,7 @@ export function SuperDraw() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const lastPtr = useRef<[number, number]>([0, 0]);
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const init = useRef(loadData());
   const [els, setEls] = useState<DrawElement[]>(init.current.elements);

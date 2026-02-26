@@ -12,6 +12,7 @@ export interface WebBookmark {
   tags: string[];
   note: string | null;
   is_read: boolean;
+  folder: string | null;
   source: 'chrome' | 'desktop' | 'mobile';
   created_at: string;
   updated_at: string;
@@ -85,6 +86,27 @@ export async function toggleBookmarkRead(userId: string, bookmarkId: string, isR
 
   if (error) {
     console.error('[bookmarks] toggle read error:', error);
+    return false;
+  }
+
+  return true;
+}
+
+export async function updateBookmarkFolder(
+  userId: string,
+  bookmarkId: string,
+  folder: string | null,
+): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+
+  const { error } = await supabase
+    .from('bookmarks')
+    .update({ folder })
+    .eq('id', bookmarkId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('[bookmarks] update folder error:', error);
     return false;
   }
 

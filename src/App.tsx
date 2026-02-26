@@ -12,7 +12,7 @@ import { fetchNotes, upsertNote, removeNote, updateNoteContent, updateNoteMeta }
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
 import type { WebBookmark } from './services/bookmarkService';
-import { toggleBookmarkRead, addBookmark } from './services/bookmarkService';
+import { toggleBookmarkRead, addBookmark, fetchBookmarks, updateBookmarkFolder } from './services/bookmarkService';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useCommands, type Command } from './hooks/useCommands';
@@ -160,6 +160,31 @@ export default function App() {
   // ── Bookmark reader state (SuperBookmark mode) ──
   const [selectedBookmark, setSelectedBookmark] = useState<WebBookmark | null>(null);
 
+  // ── Bookmark folders (localStorage only, like notes) ──
+  const [bookmarkFolders, setBookmarkFolders] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_bookmark_folders');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [bookmarkFolderMap, setBookmarkFolderMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_bookmark_folder_map');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const [selectedBookmarkFolder, setSelectedBookmarkFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_bookmark_folders', JSON.stringify(bookmarkFolders)); }
+    catch { /* ignore */ }
+  }, [bookmarkFolders]);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_bookmark_folder_map', JSON.stringify(bookmarkFolderMap)); }
+    catch { /* ignore */ }
+  }, [bookmarkFolderMap]);
+
   const handleSelectBookmark = useCallback((bk: WebBookmark) => {
     setSelectedBookmark(bk);
   }, []);
@@ -185,12 +210,100 @@ export default function App() {
       tags: [],
       note: null,
       is_read: false,
+      folder: null,
       source: 'desktop' as const,
     });
     if (bk) {
       setSelectedBookmark(bk);
     }
   }, [user]);
+
+  const handleSaveItemAsBookmark = useCallback(async (item: FeedItem) => {
+    if (!user) return;
+    const id = crypto.randomUUID();
+    await addBookmark(user.id, {
+      id,
+      url: item.url,
+      title: item.title,
+      excerpt: item.excerpt || null,
+      image: item.thumbnail || null,
+      favicon: null,
+      author: item.author || null,
+      site_name: item.feedName || null,
+      tags: item.tags ?? [],
+      note: null,
+      is_read: false,
+      folder: null,
+      source: 'desktop' as const,
+    });
+  }, [user]);
+
+  // ── Bookmark folder handlers ──
+  const handleCreateBookmarkFolder = useCallback((name: string) => {
+    setBookmarkFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameBookmarkFolder = useCallback((oldName: string, newName: string) => {
+    setBookmarkFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      const affectedIds: string[] = [];
+      for (const key of Object.keys(next)) {
+        if (next[key] === oldName) {
+          next[key] = newName;
+          affectedIds.push(key);
+        }
+      }
+      // Sync renamed folder to Supabase for affected bookmarks
+      if (user) {
+        affectedIds.forEach(id => updateBookmarkFolder(user.id, id, newName));
+      }
+      return next;
+    });
+    if (selectedBookmarkFolder === oldName) setSelectedBookmarkFolder(newName);
+  }, [selectedBookmarkFolder, user]);
+
+  const handleDeleteBookmarkFolder = useCallback((name: string) => {
+    setBookmarkFolders(prev => prev.filter(f => f !== name));
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      const affectedIds: string[] = [];
+      for (const key of Object.keys(next)) {
+        if (next[key] === name) {
+          delete next[key];
+          affectedIds.push(key);
+        }
+      }
+      // Remove folder from affected bookmarks in Supabase
+      if (user) {
+        affectedIds.forEach(id => updateBookmarkFolder(user.id, id, null));
+      }
+      return next;
+    });
+    if (selectedBookmarkFolder === name) setSelectedBookmarkFolder(null);
+  }, [selectedBookmarkFolder, user]);
+
+  const handleMoveBookmarkToFolder = useCallback((bookmarkId: string, folder: string | undefined) => {
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      if (folder) {
+        next[bookmarkId] = folder;
+      } else {
+        delete next[bookmarkId];
+      }
+      return next;
+    });
+    if (user) updateBookmarkFolder(user.id, bookmarkId, folder ?? null);
+  }, [user]);
+
+  const bookmarkFolderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const folder of bookmarkFolders) counts[folder] = 0;
+    for (const folder of Object.values(bookmarkFolderMap)) {
+      if (counts[folder] !== undefined) counts[folder]++;
+    }
+    return counts;
+  }, [bookmarkFolders, bookmarkFolderMap]);
 
   const handleAddDoc = useCallback(() => {
     const doc: EditorDoc = {
@@ -484,6 +597,17 @@ export default function App() {
           }
         }
       }).catch(err => console.error('[notes] fetch failed', err));
+
+      // Fetch bookmarks to rebuild folder assignments from Supabase
+      fetchBookmarks(userId).then(bookmarks => {
+        const folders = [...new Set(bookmarks.map(b => b.folder).filter((f): f is string => !!f))];
+        if (folders.length > 0) setBookmarkFolders(prev => [...new Set([...prev, ...folders])]);
+        const map: Record<string, string> = {};
+        for (const bk of bookmarks) {
+          if (bk.folder) map[bk.id] = bk.folder;
+        }
+        setBookmarkFolderMap(map);
+      }).catch(err => console.error('[bookmarks] fetch folders failed', err));
     }
     prevUserRef.current = userId;
   }, [user]);
@@ -875,6 +999,13 @@ export default function App() {
                   onDeleteEditorFolder={handleDeleteEditorFolder}
                   onMoveDocToFolder={handleMoveDocToFolder}
                   onAddBookmark={handleAddBookmark}
+                  bookmarkFolders={bookmarkFolders}
+                  bookmarkFolderCounts={bookmarkFolderCounts}
+                  selectedBookmarkFolder={selectedBookmarkFolder}
+                  onSelectBookmarkFolder={setSelectedBookmarkFolder}
+                  onCreateBookmarkFolder={handleCreateBookmarkFolder}
+                  onRenameBookmarkFolder={handleRenameBookmarkFolder}
+                  onDeleteBookmarkFolder={handleDeleteBookmarkFolder}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -900,7 +1031,11 @@ export default function App() {
                 ) : brandMode === 'bookmark' ? (
                   <BookmarkPanel
                     selectedBookmarkId={selectedBookmark?.id ?? null}
+                    selectedFolder={selectedBookmarkFolder}
+                    bookmarkFolderMap={bookmarkFolderMap}
+                    bookmarkFolders={bookmarkFolders}
                     onSelectBookmark={handleSelectBookmark}
+                    onMoveBookmarkToFolder={handleMoveBookmarkToFolder}
                   />
                 ) : brandMode === 'editor' || brandMode === 'draw' ? (
                   <div className="panel-empty-note" />
@@ -920,6 +1055,7 @@ export default function App() {
                     onToggleStar={store.toggleStar}
                     onToggleBookmark={store.toggleBookmark}
                     onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
+                    onSaveAsBookmark={user ? handleSaveItemAsBookmark : undefined}
                     onClose={handleCloseFeedPanel}
                   />
                 )}

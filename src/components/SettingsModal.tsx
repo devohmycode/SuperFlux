@@ -815,9 +815,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     <span className="format-option-label">Ollama (local)</span>
                   </button>
                   <button
-                    className={`format-option ${llmConfig.provider === 'groq' ? 'active' : ''}`}
+                    className={`format-option ${llmConfig.provider === 'cloud' ? 'active' : ''}`}
                     onClick={() => {
-                      const updated = { ...llmConfig, provider: 'groq' as const };
+                      const updated = { ...llmConfig, provider: 'cloud' as const };
                       setLlmConfig(updated);
                       saveLLMConfig(updated);
                     }}
@@ -935,12 +935,24 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   </div>
                 )}
 
-                {llmConfig.provider === 'groq' && !llmConfig.groqApiKey && (
-                  <div className="settings-ollama-status">
-                    <span className="ollama-status-dot disconnected" />
-                    <span className="ollama-status-text">
-                      Clé API manquante — ajoutez <code>VITE_GROQ_API_KEY</code> dans .env
-                    </span>
+                {llmConfig.provider === 'cloud' && (
+                  <div className="settings-ollama-status" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                    {!llmConfig.groqApiKey && !llmConfig.mistralApiKey && !llmConfig.geminiApiKey ? (
+                      <>
+                        <span className="ollama-status-dot disconnected" />
+                        <span className="ollama-status-text">
+                          Aucune clé API cloud — ajoutez au moins une clé dans .env (<code>VITE_GROQ_API_KEY</code>, <code>VITE_MISTRAL_API_KEY</code>, ou <code>VITE_GEMINI_API_KEY</code>)
+                        </span>
+                      </>
+                    ) : (
+                      <span className="ollama-status-text" style={{ fontSize: '11px', opacity: 0.7 }}>
+                        Failover: {[
+                          llmConfig.groqApiKey && 'Groq',
+                          llmConfig.mistralApiKey && 'Mistral',
+                          llmConfig.geminiApiKey && 'Gemini',
+                        ].filter(Boolean).join(' → ')}
+                      </span>
+                    )}
                   </div>
                 )}
 
