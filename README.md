@@ -1,6 +1,6 @@
 
 
-![Shot](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-01.png)
+![Shot](https://res.cloudinary.com/dptrimoqv/image/upload/v1772099004/519shots_so_md2m1k.png)
 [![Build & Release](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml)
 # SuperFlux
 
@@ -23,7 +23,7 @@ The interface is split into three independently resizable columns with drag hand
 Each panel can be **closed individually** -- it collapses into a thin clickable strip. Toggle panels with keyboard shortcuts `1`, `2`, `3`. Panels resize freely by dragging the handles between them.
 
 ### Collapsible Bar Mode
-![Shot5](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-05.png)
+![Shot5](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098782/750shots_so_zgfr6p.png)
 Click the collapse button in the title bar and the entire app shrinks into a **slim floating bar** that stays on your desktop. The bar displays:
 
 - **Unread count**, favorites and read-later badges
@@ -95,6 +95,16 @@ Switch between modes using the icon tab bar in the sources panel or keyboard sho
 | **SuperEditor** | `Ctrl+4` | Document editor with Pandoc export (PDF, DOCX, HTML, Markdown) |
 | **SuperDraw** | `Ctrl+5` | Canvas drawing tool with shapes, freehand, text, arrows, dark/light mode, and PNG export |
 
+## SuperFlux
+![1](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/103shots_so_wjjd1q.png)
+## SuperBookmark
+![2](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/183shots_so_jeb7qw.png)
+## SuperNote
+![3](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/763shots_so_x2qzix.png)
+## SuperEditor
+![4](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/217shots_so_dgkggj.png)
+## SuperDraw
+![5](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098782/54shots_so_jmrwts.png)
 ### SuperBookmark
 
 Save and organize web bookmarks with automatic metadata extraction (title, excerpt, favicon, author). Features a built-in reader view for saved pages.
