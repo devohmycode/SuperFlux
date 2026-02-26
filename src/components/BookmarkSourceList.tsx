@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { WebBookmark } from '../services/bookmarkService';
 
 interface BookmarkSourceListProps {
   folders: string[];
@@ -9,6 +10,11 @@ interface BookmarkSourceListProps {
   onCreateFolder: (name: string) => void;
   onRenameFolder: (oldName: string, newName: string) => void;
   onDeleteFolder: (name: string) => void;
+  bookmarks?: WebBookmark[];
+  bookmarkFolderMap?: Record<string, string>;
+  selectedBookmarkId?: string | null;
+  onSelectBookmark?: (bookmark: WebBookmark) => void;
+  totalCount?: number;
 }
 
 type ContextMenuState =
@@ -23,14 +29,29 @@ export function BookmarkSourceList({
   onCreateFolder,
   onRenameFolder,
   onDeleteFolder,
+  bookmarks,
+  bookmarkFolderMap,
+  selectedBookmarkId,
+  onSelectBookmark,
+  totalCount,
 }: BookmarkSourceListProps) {
   const [newFolderInput, setNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const newFolderRef = useRef<HTMLInputElement>(null);
   const renameRef = useRef<HTMLInputElement>(null);
+
+  const toggleFolder = useCallback((folder: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folder)) next.delete(folder);
+      else next.add(folder);
+      return next;
+    });
+  }, []);
 
   const handleCreateFolder = useCallback(() => {
     const name = newFolderName.trim();
@@ -45,6 +66,14 @@ export function BookmarkSourceList({
     const name = renameValue.trim();
     if (name && renamingFolder && name !== renamingFolder && !folders.includes(name)) {
       onRenameFolder(renamingFolder, name);
+      // Update expanded key
+      setExpandedFolders(prev => {
+        if (!prev.has(renamingFolder)) return prev;
+        const next = new Set(prev);
+        next.delete(renamingFolder);
+        next.add(name);
+        return next;
+      });
     }
     setRenamingFolder(null);
     setRenameValue('');
@@ -68,6 +97,12 @@ export function BookmarkSourceList({
     };
   }, [contextMenu]);
 
+  // Get bookmarks for a given folder
+  const getBookmarksForFolder = (folder: string): WebBookmark[] => {
+    if (!bookmarks || !bookmarkFolderMap) return [];
+    return bookmarks.filter(bk => bookmarkFolderMap[bk.id] === folder);
+  };
+
   return (
     <div className="nsrc">
       {/* All bookmarks */}
@@ -77,6 +112,9 @@ export function BookmarkSourceList({
       >
         <span className="source-all-icon">🔖</span>
         <span className="source-all-label">Tous les bookmarks</span>
+        {(totalCount ?? 0) > 0 && (
+          <span className="source-all-count">{totalCount}</span>
+        )}
       </button>
 
       {/* New folder button */}
@@ -118,28 +156,19 @@ export function BookmarkSourceList({
         )}
       </AnimatePresence>
 
-      {/* Folders */}
-      {folders.map((folder, idx) => {
+      {/* Folders (expandable, like SuperFlux subfolders) */}
+      {folders.map((folder) => {
         const count = folderCounts[folder] || 0;
+        const isExpanded = expandedFolders.has(folder);
+        const folderBookmarks = getBookmarksForFolder(folder);
 
         return (
-          <motion.div
-            key={folder}
-            className="nsrc-folder"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: idx * 0.04, duration: 0.25 }}
-          >
-            <div
-              className={`nsrc-folder-header ${selectedFolder === folder ? 'active' : ''}`}
-              onClick={() => onSelectFolder(folder)}
-              onContextMenu={(e) => handleFolderContext(e, folder)}
-            >
-              <span className="nsrc-folder-icon">📁</span>
-              {renamingFolder === folder ? (
+          <div key={folder} className="subfolder">
+            {renamingFolder === folder ? (
+              <div className="folder-inline-input-wrapper" style={{ paddingLeft: 12 }}>
                 <input
                   ref={renameRef}
-                  className="nsrc-folder-input inline"
+                  className="folder-inline-input"
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
@@ -150,12 +179,60 @@ export function BookmarkSourceList({
                   onClick={(e) => e.stopPropagation()}
                   autoFocus
                 />
-              ) : (
-                <span className="nsrc-folder-name">{folder}</span>
-              )}
-              <span className="nsrc-folder-count">{count}</span>
-            </div>
-          </motion.div>
+              </div>
+            ) : (
+              <button
+                className={`subfolder-header ${selectedFolder === folder ? 'active' : ''}`}
+                style={{ paddingLeft: 12 }}
+                onClick={() => {
+                  toggleFolder(folder);
+                  onSelectFolder(folder);
+                }}
+                onContextMenu={(e) => handleFolderContext(e, folder)}
+              >
+                <span className={`subfolder-chevron ${isExpanded ? 'expanded' : ''}`}>›</span>
+                <span className="subfolder-icon">📁</span>
+                <span className="subfolder-name">{folder}</span>
+                <span className="subfolder-count">{count}</span>
+              </button>
+            )}
+
+            {isExpanded && (
+              <div className="subfolder-feeds">
+                {folderBookmarks.length === 0 ? (
+                  <div className="bksrc-empty" style={{ paddingLeft: 32, fontSize: 11, color: 'var(--text-tertiary)', padding: '4px 8px 4px 32px' }}>
+                    Aucun bookmark
+                  </div>
+                ) : (
+                  folderBookmarks.map((bk) => (
+                    <button
+                      key={bk.id}
+                      className={`feed-item-btn ${selectedBookmarkId === bk.id ? 'active' : ''}`}
+                      style={{ paddingLeft: 32 }}
+                      onClick={() => onSelectBookmark?.(bk)}
+                      title={bk.url}
+                    >
+                      {bk.favicon ? (
+                        <img
+                          src={bk.favicon}
+                          alt=""
+                          className="feed-icon"
+                          style={{ width: 14, height: 14, borderRadius: 2 }}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      ) : (
+                        <span className="feed-icon" style={{ fontSize: 11 }}>🔖</span>
+                      )}
+                      <span className="feed-name">{bk.title}</span>
+                      {!bk.is_read && (
+                        <span className="feed-unread" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         );
       })}
 

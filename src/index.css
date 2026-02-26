@@ -900,7 +900,8 @@ body {
         -4px -4px 16px rgba(255, 255, 255, 0.6);
 }
 
-.dark .bk-blob-card {
+.dark .bk-blob-card,
+.amoled .bk-blob-card {
     box-shadow:
         6px 6px 24px rgba(0, 0, 0, 0.4),
         -4px -4px 16px rgba(255, 255, 255, 0.03);
@@ -927,7 +928,8 @@ body {
     z-index: 0;
 }
 
-.dark .bk-blob-card__blob { opacity: 0.7; }
+.dark .bk-blob-card__blob,
+.amoled .bk-blob-card__blob { opacity: 0.7; }
 
 /* Glassy content overlay */
 .bk-blob-card__glass {
@@ -945,7 +947,8 @@ body {
     overflow: hidden;
 }
 
-.dark .bk-blob-card__glass {
+.dark .bk-blob-card__glass,
+.amoled .bk-blob-card__glass {
     background: rgba(15, 15, 18, 0.82);
     outline-color: rgba(255, 255, 255, 0.06);
 }
@@ -1067,7 +1070,8 @@ body {
     white-space: nowrap;
 }
 
-.dark .bk-blob-card__tag {
+.dark .bk-blob-card__tag,
+.amoled .bk-blob-card__tag {
     background: rgba(255, 255, 255, 0.06);
 }
 
@@ -1100,7 +1104,8 @@ body {
     transition: all 150ms;
 }
 
-.dark .bk-blob-card__action-btn { background: rgba(255, 255, 255, 0.06); }
+.dark .bk-blob-card__action-btn,
+.amoled .bk-blob-card__action-btn { background: rgba(255, 255, 255, 0.06); }
 .bk-blob-card__action-btn:hover { background: var(--bg-active); color: var(--text-primary); }
 .bk-blob-card__action-btn--delete:hover { color: var(--red); }
 

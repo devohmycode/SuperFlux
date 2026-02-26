@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
+import type { DrawDoc } from './DrawFileList';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -20,15 +21,18 @@ interface DrawElement {
 interface Camera { x: number; y: number; zoom: number; }
 type Handle = 'nw' | 'ne' | 'sw' | 'se';
 
-const STORAGE_KEY = 'superflux_draw';
-const uid = () => Math.random().toString(36).slice(2, 10);
-
-function loadData(): { elements: DrawElement[]; camera: Camera } {
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch { /* */ }
-  return { elements: [], camera: { x: 0, y: 0, zoom: 1 } };
+interface SuperDrawProps {
+  doc?: DrawDoc | null;
+  onUpdateContent?: (id: string, content: string) => void;
+  onAddDoc?: () => void;
 }
-function saveData(els: DrawElement[], cam: Camera) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ elements: els, camera: cam })); } catch { /* */ }
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+const EMPTY_DATA = { elements: [] as DrawElement[], camera: { x: 0, y: 0, zoom: 1 } };
+
+function parseDocContent(doc?: DrawDoc | null): { elements: DrawElement[]; camera: Camera } {
+  if (!doc || !doc.content) return EMPTY_DATA;
+  try { return JSON.parse(doc.content); } catch { return EMPTY_DATA; }
 }
 
 // ─── Geometry ────────────────────────────────────────────────────────
@@ -150,27 +154,44 @@ const FONT_SIZES = [12, 16, 20, 28, 36, 48, 64];
 // Component
 // ═════════════════════════════════════════════════════════════════════
 
-export function SuperDraw() {
+export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const lastPtr = useRef<[number, number]>([0, 0]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const init = useRef(loadData());
-  const [els, setEls] = useState<DrawElement[]>(init.current.elements);
-  const [cam, setCam] = useState<Camera>(init.current.camera);
+  const init = parseDocContent(doc);
+  const [els, setEls] = useState<DrawElement[]>(init.elements);
+  const [cam, setCam] = useState<Camera>(init.camera);
   const [tool, setTool] = useState<Tool>('select');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [sColor, setSColor] = useState('#1e1e1e');
   const [fColor, setFColor] = useState('transparent');
   const [sWidth, setSWidth] = useState(2);
-  const [hist, setHist] = useState<DrawElement[][]>([init.current.elements]);
+  const [hist, setHist] = useState<DrawElement[][]>([init.elements]);
   const [hIdx, setHIdx] = useState(0);
   const [dark, setDark] = useState(false);
   const [fontSize, setFontSize] = useState(20);
   const [textEdit, setTextEdit] = useState<{ wx: number; wy: number; sx: number; sy: number } | null>(null);
   const [textValue, setTextValue] = useState('');
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Track doc id to reset state when switching documents
+  const prevDocId = useRef<string | null | undefined>(doc?.id);
+
+  useEffect(() => {
+    if (doc?.id !== prevDocId.current) {
+      prevDocId.current = doc?.id;
+      const data = parseDocContent(doc);
+      setEls(data.elements);
+      setCam(data.camera);
+      setSel(new Set());
+      setHist([data.elements]);
+      setHIdx(0);
+      setTextEdit(null);
+      setTextValue('');
+    }
+  }, [doc]);
 
   // Refs mirroring state for imperative paint
   const R = useRef({ els, cam, sel });
@@ -200,9 +221,12 @@ export function SuperDraw() {
 
   // ── Autosave ──
   useEffect(() => {
+    if (!doc || !onUpdateContent) return;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveData(els, cam), 400);
-  }, [els, cam]);
+    saveTimer.current = setTimeout(() => {
+      onUpdateContent(doc.id, JSON.stringify({ elements: els, camera: cam }));
+    }, 400);
+  }, [els, cam, doc, onUpdateContent]);
 
   // ── History ──
   const push = useCallback((next: DrawElement[]) => {
@@ -462,6 +486,20 @@ export function SuperDraw() {
     border: active ? `2px solid ${accent}` : c === '#ffffff' ? '1px solid #ccc' : '2px solid transparent',
     background: c === 'transparent' ? 'repeating-conic-gradient(#ddd 0% 25%, transparent 0% 50%) 50% / 10px 10px' : c,
   });
+
+  if (!doc) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: txtSec }}>
+        <span style={{ fontSize: 48 }}>🎨</span>
+        <p style={{ fontSize: 14 }}>Selectionnez ou creez un schema</p>
+        {onAddDoc && (
+          <button onClick={onAddDoc} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${border}`, background: accentBg, color: accent, cursor: 'pointer', fontSize: 13 }}>
+            + Nouveau schema
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

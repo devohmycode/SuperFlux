@@ -15,6 +15,7 @@ import { isRSSHubUrl } from "../services/rsshubService";
 import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
 import { BookmarkSourceList } from "./BookmarkSourceList";
+import { DrawFileList } from "./DrawFileList";
 import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
@@ -93,6 +94,25 @@ interface SourcePanelProps {
   onCreateBookmarkFolder?: (name: string) => void;
   onRenameBookmarkFolder?: (oldName: string, newName: string) => void;
   onDeleteBookmarkFolder?: (name: string) => void;
+  bookmarkItems?: import('../services/bookmarkService').WebBookmark[];
+  bookmarkFolderMap?: Record<string, string>;
+  selectedBookmarkId?: string | null;
+  onSelectBookmark?: (bookmark: import('../services/bookmarkService').WebBookmark) => void;
+  bookmarkTotalCount?: number;
+  // Draw mode props
+  drawDocs?: import('./DrawFileList').DrawDoc[];
+  drawFolders?: string[];
+  selectedDrawId?: string | null;
+  selectedDrawFolder?: string | null;
+  onSelectDraw?: (id: string) => void;
+  onSelectDrawFolder?: (folder: string | null) => void;
+  onAddDraw?: () => void;
+  onDeleteDraw?: (id: string) => void;
+  onRenameDraw?: (id: string, title: string) => void;
+  onCreateDrawFolder?: (name: string) => void;
+  onRenameDrawFolder?: (oldName: string, newName: string) => void;
+  onDeleteDrawFolder?: (name: string) => void;
+  onMoveDrawToFolder?: (docId: string, folder: string | undefined) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -239,6 +259,24 @@ export function SourcePanel({
   onCreateBookmarkFolder,
   onRenameBookmarkFolder,
   onDeleteBookmarkFolder,
+  bookmarkItems,
+  bookmarkFolderMap,
+  selectedBookmarkId,
+  onSelectBookmark,
+  bookmarkTotalCount,
+  drawDocs = [],
+  drawFolders = [],
+  selectedDrawId = null,
+  selectedDrawFolder = null,
+  onSelectDraw,
+  onSelectDrawFolder,
+  onAddDraw,
+  onDeleteDraw,
+  onRenameDraw,
+  onCreateDrawFolder,
+  onRenameDrawFolder,
+  onDeleteDrawFolder,
+  onMoveDrawToFolder,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -702,9 +740,28 @@ export function SourcePanel({
             onCreateFolder={onCreateBookmarkFolder ?? (() => {})}
             onRenameFolder={onRenameBookmarkFolder ?? (() => {})}
             onDeleteFolder={onDeleteBookmarkFolder ?? (() => {})}
+            bookmarks={bookmarkItems}
+            bookmarkFolderMap={bookmarkFolderMap}
+            selectedBookmarkId={selectedBookmarkId}
+            onSelectBookmark={onSelectBookmark}
+            totalCount={bookmarkTotalCount}
           />
         ) : brandMode === 'draw' ? (
-          <div className="panel-empty-note" />
+          <DrawFileList
+            docs={drawDocs}
+            folders={drawFolders}
+            selectedDocId={selectedDrawId}
+            selectedFolder={selectedDrawFolder}
+            onSelectDoc={onSelectDraw ?? (() => {})}
+            onSelectFolder={onSelectDrawFolder ?? (() => {})}
+            onAddDoc={onAddDraw ?? (() => {})}
+            onDeleteDoc={onDeleteDraw ?? (() => {})}
+            onRenameDoc={onRenameDraw ?? (() => {})}
+            onCreateFolder={onCreateDrawFolder ?? (() => {})}
+            onRenameFolder={onRenameDrawFolder ?? (() => {})}
+            onDeleteFolder={onDeleteDrawFolder ?? (() => {})}
+            onMoveDocToFolder={onMoveDrawToFolder ?? (() => {})}
+          />
         ) : (
         <>
         <button

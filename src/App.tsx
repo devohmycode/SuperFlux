@@ -7,7 +7,9 @@ import { NoteEditor } from './components/NoteEditor';
 import { SuperEditor } from './components/SuperEditor';
 import { SuperDraw } from './components/SuperDraw';
 import { type EditorDoc, loadEditorDocs, saveEditorDocs, loadEditorFolders, saveEditorFolders } from './components/EditorFileList';
+import { type DrawDoc, loadDrawDocs, saveDrawDocs, loadDrawFolders, saveDrawFolders } from './components/DrawFileList';
 import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
+import { fetchDrawDocs, upsertDrawDoc, removeDrawDoc, updateDrawDocContent, updateDrawDocMeta } from './services/drawDocService';
 import { fetchNotes, upsertNote, removeNote, updateNoteContent, updateNoteMeta } from './services/noteService';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
@@ -149,16 +151,31 @@ export default function App() {
   useEffect(() => { saveEditorDocs(editorDocs); }, [editorDocs]);
   useEffect(() => { saveEditorFolders(editorFolders); }, [editorFolders]);
 
+  // ── Draw documents state (SuperDraw mode) ──
+  const [drawDocs, setDrawDocs] = useState<DrawDoc[]>(loadDrawDocs);
+  const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
+  const [drawFolders, setDrawFolders] = useState<string[]>(loadDrawFolders);
+  const [selectedDrawFolder, setSelectedDrawFolder] = useState<string | null>(null);
+
+  useEffect(() => { saveDrawDocs(drawDocs); }, [drawDocs]);
+  useEffect(() => { saveDrawFolders(drawFolders); }, [drawFolders]);
+
   const selectedDoc = useMemo(() =>
     editorDocs.find(d => d.id === selectedDocId) ?? null,
   [editorDocs, selectedDocId]);
 
+  const selectedDraw = useMemo(() =>
+    drawDocs.find(d => d.id === selectedDrawId) ?? null,
+  [drawDocs, selectedDrawId]);
+
   // Debounce timers for Supabase content updates
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Bookmark reader state (SuperBookmark mode) ──
   const [selectedBookmark, setSelectedBookmark] = useState<WebBookmark | null>(null);
+  const [bookmarkList, setBookmarkList] = useState<WebBookmark[]>([]);
 
   // ── Bookmark folders (localStorage only, like notes) ──
   const [bookmarkFolders, setBookmarkFolders] = useState<string[]>(() => {
@@ -381,6 +398,79 @@ export default function App() {
     if (user) updateEditorDocMeta(user.id, docId, { folder: folder ?? null });
   }, [user]);
 
+  // ── Draw document handlers ──
+  const handleAddDraw = useCallback(() => {
+    const doc: DrawDoc = {
+      id: crypto.randomUUID(),
+      title: 'Sans titre',
+      content: JSON.stringify({ elements: [], camera: { x: 0, y: 0, zoom: 1 } }),
+      folder: selectedDrawFolder ?? undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setDrawDocs(prev => [doc, ...prev]);
+    setSelectedDrawId(doc.id);
+    if (user) upsertDrawDoc(user.id, { id: doc.id, title: doc.title, content: doc.content, folder: doc.folder });
+  }, [user, selectedDrawFolder]);
+
+  const handleDeleteDraw = useCallback((id: string) => {
+    setDrawDocs(prev => prev.filter(d => d.id !== id));
+    setSelectedDrawId(prev => prev === id ? null : prev);
+    if (user) removeDrawDoc(user.id, id);
+  }, [user]);
+
+  const handleRenameDraw = useCallback((id: string, title: string) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, title, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateDrawDocMeta(user.id, id, { title });
+  }, [user]);
+
+  const handleUpdateDrawContent = useCallback((id: string, content: string) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, content, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) {
+      if (drawSaveTimerRef.current) clearTimeout(drawSaveTimerRef.current);
+      drawSaveTimerRef.current = setTimeout(() => {
+        updateDrawDocContent(user.id, id, content);
+      }, 1000);
+    }
+  }, [user]);
+
+  const handleCreateDrawFolder = useCallback((name: string) => {
+    setDrawFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameDrawFolder = useCallback((oldName: string, newName: string) => {
+    setDrawFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setDrawDocs(prev => prev.map(d => d.folder === oldName ? { ...d, folder: newName } : d));
+    if (selectedDrawFolder === oldName) setSelectedDrawFolder(newName);
+    if (user) {
+      drawDocs.filter(d => d.folder === oldName).forEach(d => {
+        updateDrawDocMeta(user.id, d.id, { folder: newName });
+      });
+    }
+  }, [selectedDrawFolder, user, drawDocs]);
+
+  const handleDeleteDrawFolder = useCallback((name: string) => {
+    setDrawFolders(prev => prev.filter(f => f !== name));
+    setDrawDocs(prev => prev.map(d => d.folder === name ? { ...d, folder: undefined } : d));
+    if (selectedDrawFolder === name) setSelectedDrawFolder(null);
+    if (user) {
+      drawDocs.filter(d => d.folder === name).forEach(d => {
+        updateDrawDocMeta(user.id, d.id, { folder: null });
+      });
+    }
+  }, [selectedDrawFolder, user, drawDocs]);
+
+  const handleMoveDrawToFolder = useCallback((docId: string, folder: string | undefined) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === docId ? { ...d, folder, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateDrawDocMeta(user.id, docId, { folder: folder ?? null });
+  }, [user]);
+
   const selectedNote = useMemo(() =>
     notes.find(n => n.id === selectedNoteId) ?? null,
   [notes, selectedNoteId]);
@@ -497,6 +587,23 @@ export default function App() {
     if (user) updateNoteMeta(user.id, noteId, { folder: folder ?? null });
   }, [user]);
 
+  // Refresh bookmark list when switching to bookmark mode
+  useEffect(() => {
+    if (brandMode === 'bookmark' && user) {
+      fetchBookmarks(user.id).then(bks => {
+        setBookmarkList(bks);
+        // Also update folder map from Supabase data
+        const map: Record<string, string> = {};
+        for (const bk of bks) {
+          if (bk.folder) map[bk.id] = bk.folder;
+        }
+        setBookmarkFolderMap(map);
+        const folders = [...new Set(bks.map(b => b.folder).filter((f): f is string => !!f))];
+        if (folders.length > 0) setBookmarkFolders(prev => [...new Set([...prev, ...folders])]);
+      }).catch(err => console.error('[bookmarks] refresh failed', err));
+    }
+  }, [brandMode, user]);
+
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
   }, []);
@@ -599,15 +706,33 @@ export default function App() {
       }).catch(err => console.error('[notes] fetch failed', err));
 
       // Fetch bookmarks to rebuild folder assignments from Supabase
-      fetchBookmarks(userId).then(bookmarks => {
-        const folders = [...new Set(bookmarks.map(b => b.folder).filter((f): f is string => !!f))];
+      fetchBookmarks(userId).then(bks => {
+        setBookmarkList(bks);
+        const folders = [...new Set(bks.map(b => b.folder).filter((f): f is string => !!f))];
         if (folders.length > 0) setBookmarkFolders(prev => [...new Set([...prev, ...folders])]);
         const map: Record<string, string> = {};
-        for (const bk of bookmarks) {
+        for (const bk of bks) {
           if (bk.folder) map[bk.id] = bk.folder;
         }
         setBookmarkFolderMap(map);
       }).catch(err => console.error('[bookmarks] fetch folders failed', err));
+
+      // Fetch draw docs from Supabase
+      fetchDrawDocs(userId).then(rows => {
+        if (rows.length > 0) {
+          const docs: DrawDoc[] = rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            folder: r.folder ?? undefined,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          }));
+          setDrawDocs(docs);
+          const folders = [...new Set(docs.map(d => d.folder).filter((f): f is string => !!f))];
+          if (folders.length > 0) setDrawFolders(prev => [...new Set([...prev, ...folders])]);
+        }
+      }).catch(err => console.error('[draw-docs] fetch failed', err));
     }
     prevUserRef.current = userId;
   }, [user]);
@@ -999,6 +1124,19 @@ export default function App() {
                   onDeleteEditorFolder={handleDeleteEditorFolder}
                   onMoveDocToFolder={handleMoveDocToFolder}
                   onAddBookmark={handleAddBookmark}
+                  drawDocs={drawDocs}
+                  drawFolders={drawFolders}
+                  selectedDrawId={selectedDrawId}
+                  selectedDrawFolder={selectedDrawFolder}
+                  onSelectDraw={setSelectedDrawId}
+                  onSelectDrawFolder={setSelectedDrawFolder}
+                  onAddDraw={handleAddDraw}
+                  onDeleteDraw={handleDeleteDraw}
+                  onRenameDraw={handleRenameDraw}
+                  onCreateDrawFolder={handleCreateDrawFolder}
+                  onRenameDrawFolder={handleRenameDrawFolder}
+                  onDeleteDrawFolder={handleDeleteDrawFolder}
+                  onMoveDrawToFolder={handleMoveDrawToFolder}
                   bookmarkFolders={bookmarkFolders}
                   bookmarkFolderCounts={bookmarkFolderCounts}
                   selectedBookmarkFolder={selectedBookmarkFolder}
@@ -1006,6 +1144,11 @@ export default function App() {
                   onCreateBookmarkFolder={handleCreateBookmarkFolder}
                   onRenameBookmarkFolder={handleRenameBookmarkFolder}
                   onDeleteBookmarkFolder={handleDeleteBookmarkFolder}
+                  bookmarkItems={bookmarkList}
+                  bookmarkFolderMap={bookmarkFolderMap}
+                  selectedBookmarkId={selectedBookmark?.id ?? null}
+                  onSelectBookmark={handleSelectBookmark}
+                  bookmarkTotalCount={bookmarkList.length}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -1079,7 +1222,7 @@ export default function App() {
               ) : brandMode === 'editor' ? (
                 <SuperEditor doc={selectedDoc} onUpdateContent={handleUpdateDocContent} onAddDoc={handleAddDoc} />
               ) : brandMode === 'draw' ? (
-                <SuperDraw />
+                <SuperDraw doc={selectedDraw} onUpdateContent={handleUpdateDrawContent} onAddDoc={handleAddDraw} />
               ) : brandMode === 'bookmark' ? (
                 <BookmarkReader
                   bookmark={selectedBookmark}
