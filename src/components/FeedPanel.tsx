@@ -46,6 +46,7 @@ interface FeedPanelProps {
   onToggleStar: (itemId: string) => void;
   onToggleBookmark: (itemId: string) => void;
   onReorderItems?: (orderedIds: string[]) => void;
+  onSaveAsBookmark?: (item: FeedItem) => void;
   onClose: () => void;
 }
 
@@ -115,7 +116,7 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
   return null;
 }
 
-export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onClose }: FeedPanelProps) {
+export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onSaveAsBookmark, onClose }: FeedPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
@@ -675,6 +676,15 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
             <span className="feed-context-menu-icon">{contextMenu.item.isBookmarked ? '🔖' : '🏷'}</span>
             {contextMenu.item.isBookmarked ? 'Retirer de Lire plus tard' : 'Lire plus tard'}
           </button>
+          {onSaveAsBookmark && (
+            <button
+              className="feed-context-menu-item"
+              onClick={() => { onSaveAsBookmark(contextMenu.item); setContextMenu(null); }}
+            >
+              <span className="feed-context-menu-icon">📌</span>
+              Ajouter aux Bookmarks
+            </button>
+          )}
         </div>
       )}
     </div>

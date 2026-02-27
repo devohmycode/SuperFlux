@@ -7,12 +7,14 @@ import { NoteEditor } from './components/NoteEditor';
 import { SuperEditor } from './components/SuperEditor';
 import { SuperDraw } from './components/SuperDraw';
 import { type EditorDoc, loadEditorDocs, saveEditorDocs, loadEditorFolders, saveEditorFolders } from './components/EditorFileList';
+import { type DrawDoc, loadDrawDocs, saveDrawDocs, loadDrawFolders, saveDrawFolders } from './components/DrawFileList';
 import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
+import { fetchDrawDocs, upsertDrawDoc, removeDrawDoc, updateDrawDocContent, updateDrawDocMeta } from './services/drawDocService';
 import { fetchNotes, upsertNote, removeNote, updateNoteContent, updateNoteMeta } from './services/noteService';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
 import type { WebBookmark } from './services/bookmarkService';
-import { toggleBookmarkRead, addBookmark } from './services/bookmarkService';
+import { toggleBookmarkRead, addBookmark, fetchBookmarks, updateBookmarkFolder } from './services/bookmarkService';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useCommands, type Command } from './hooks/useCommands';
@@ -22,6 +24,7 @@ import { useResizablePanels } from './hooks/useResizablePanels';
 import { useFeedStore, type FeedStoreCallbacks } from './hooks/useFeedStore';
 import { useHighlightStore } from './hooks/useHighlightStore';
 import { useAuth } from './contexts/AuthContext';
+import { usePro } from './contexts/ProContext';
 import { SyncService, SYNC_ERROR_EVENT } from './services/syncService';
 import { getProviderConfig, ProviderSyncService } from './services/providerSync';
 import type { NewFeedData } from './components/AddFeedModal';
@@ -51,6 +54,7 @@ function getSyncInterval(): number {
 
 export default function App() {
   const { user } = useAuth();
+  const { isPro, showUpgradeModal } = usePro();
   const { commands, registerCommands, paletteOpen, closePalette, helpOpen, toggleHelp, closeHelp } = useCommands();
 
   // Sync callbacks wired to SyncService (fire-and-forget, errors logged)
@@ -149,16 +153,56 @@ export default function App() {
   useEffect(() => { saveEditorDocs(editorDocs); }, [editorDocs]);
   useEffect(() => { saveEditorFolders(editorFolders); }, [editorFolders]);
 
+  // ── Draw documents state (SuperDraw mode) ──
+  const [drawDocs, setDrawDocs] = useState<DrawDoc[]>(loadDrawDocs);
+  const [selectedDrawId, setSelectedDrawId] = useState<string | null>(null);
+  const [drawFolders, setDrawFolders] = useState<string[]>(loadDrawFolders);
+  const [selectedDrawFolder, setSelectedDrawFolder] = useState<string | null>(null);
+
+  useEffect(() => { saveDrawDocs(drawDocs); }, [drawDocs]);
+  useEffect(() => { saveDrawFolders(drawFolders); }, [drawFolders]);
+
   const selectedDoc = useMemo(() =>
     editorDocs.find(d => d.id === selectedDocId) ?? null,
   [editorDocs, selectedDocId]);
 
+  const selectedDraw = useMemo(() =>
+    drawDocs.find(d => d.id === selectedDrawId) ?? null,
+  [drawDocs, selectedDrawId]);
+
   // Debounce timers for Supabase content updates
   const contentSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Bookmark reader state (SuperBookmark mode) ──
   const [selectedBookmark, setSelectedBookmark] = useState<WebBookmark | null>(null);
+  const [bookmarkList, setBookmarkList] = useState<WebBookmark[]>([]);
+
+  // ── Bookmark folders (localStorage only, like notes) ──
+  const [bookmarkFolders, setBookmarkFolders] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_bookmark_folders');
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [bookmarkFolderMap, setBookmarkFolderMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('superflux_bookmark_folder_map');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const [selectedBookmarkFolder, setSelectedBookmarkFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_bookmark_folders', JSON.stringify(bookmarkFolders)); }
+    catch { /* ignore */ }
+  }, [bookmarkFolders]);
+
+  useEffect(() => {
+    try { localStorage.setItem('superflux_bookmark_folder_map', JSON.stringify(bookmarkFolderMap)); }
+    catch { /* ignore */ }
+  }, [bookmarkFolderMap]);
 
   const handleSelectBookmark = useCallback((bk: WebBookmark) => {
     setSelectedBookmark(bk);
@@ -185,12 +229,100 @@ export default function App() {
       tags: [],
       note: null,
       is_read: false,
+      folder: null,
       source: 'desktop' as const,
     });
     if (bk) {
       setSelectedBookmark(bk);
     }
   }, [user]);
+
+  const handleSaveItemAsBookmark = useCallback(async (item: FeedItem) => {
+    if (!user) return;
+    const id = crypto.randomUUID();
+    await addBookmark(user.id, {
+      id,
+      url: item.url,
+      title: item.title,
+      excerpt: item.excerpt || null,
+      image: item.thumbnail || null,
+      favicon: null,
+      author: item.author || null,
+      site_name: item.feedName || null,
+      tags: item.tags ?? [],
+      note: null,
+      is_read: false,
+      folder: null,
+      source: 'desktop' as const,
+    });
+  }, [user]);
+
+  // ── Bookmark folder handlers ──
+  const handleCreateBookmarkFolder = useCallback((name: string) => {
+    setBookmarkFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameBookmarkFolder = useCallback((oldName: string, newName: string) => {
+    setBookmarkFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      const affectedIds: string[] = [];
+      for (const key of Object.keys(next)) {
+        if (next[key] === oldName) {
+          next[key] = newName;
+          affectedIds.push(key);
+        }
+      }
+      // Sync renamed folder to Supabase for affected bookmarks
+      if (user) {
+        affectedIds.forEach(id => updateBookmarkFolder(user.id, id, newName));
+      }
+      return next;
+    });
+    if (selectedBookmarkFolder === oldName) setSelectedBookmarkFolder(newName);
+  }, [selectedBookmarkFolder, user]);
+
+  const handleDeleteBookmarkFolder = useCallback((name: string) => {
+    setBookmarkFolders(prev => prev.filter(f => f !== name));
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      const affectedIds: string[] = [];
+      for (const key of Object.keys(next)) {
+        if (next[key] === name) {
+          delete next[key];
+          affectedIds.push(key);
+        }
+      }
+      // Remove folder from affected bookmarks in Supabase
+      if (user) {
+        affectedIds.forEach(id => updateBookmarkFolder(user.id, id, null));
+      }
+      return next;
+    });
+    if (selectedBookmarkFolder === name) setSelectedBookmarkFolder(null);
+  }, [selectedBookmarkFolder, user]);
+
+  const handleMoveBookmarkToFolder = useCallback((bookmarkId: string, folder: string | undefined) => {
+    setBookmarkFolderMap(prev => {
+      const next = { ...prev };
+      if (folder) {
+        next[bookmarkId] = folder;
+      } else {
+        delete next[bookmarkId];
+      }
+      return next;
+    });
+    if (user) updateBookmarkFolder(user.id, bookmarkId, folder ?? null);
+  }, [user]);
+
+  const bookmarkFolderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const folder of bookmarkFolders) counts[folder] = 0;
+    for (const folder of Object.values(bookmarkFolderMap)) {
+      if (counts[folder] !== undefined) counts[folder]++;
+    }
+    return counts;
+  }, [bookmarkFolders, bookmarkFolderMap]);
 
   const handleAddDoc = useCallback(() => {
     const doc: EditorDoc = {
@@ -266,6 +398,79 @@ export default function App() {
       d.id === docId ? { ...d, folder, updatedAt: new Date().toISOString() } : d
     ));
     if (user) updateEditorDocMeta(user.id, docId, { folder: folder ?? null });
+  }, [user]);
+
+  // ── Draw document handlers ──
+  const handleAddDraw = useCallback(() => {
+    const doc: DrawDoc = {
+      id: crypto.randomUUID(),
+      title: 'Sans titre',
+      content: JSON.stringify({ elements: [], camera: { x: 0, y: 0, zoom: 1 } }),
+      folder: selectedDrawFolder ?? undefined,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setDrawDocs(prev => [doc, ...prev]);
+    setSelectedDrawId(doc.id);
+    if (user) upsertDrawDoc(user.id, { id: doc.id, title: doc.title, content: doc.content, folder: doc.folder });
+  }, [user, selectedDrawFolder]);
+
+  const handleDeleteDraw = useCallback((id: string) => {
+    setDrawDocs(prev => prev.filter(d => d.id !== id));
+    setSelectedDrawId(prev => prev === id ? null : prev);
+    if (user) removeDrawDoc(user.id, id);
+  }, [user]);
+
+  const handleRenameDraw = useCallback((id: string, title: string) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, title, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateDrawDocMeta(user.id, id, { title });
+  }, [user]);
+
+  const handleUpdateDrawContent = useCallback((id: string, content: string) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === id ? { ...d, content, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) {
+      if (drawSaveTimerRef.current) clearTimeout(drawSaveTimerRef.current);
+      drawSaveTimerRef.current = setTimeout(() => {
+        updateDrawDocContent(user.id, id, content);
+      }, 1000);
+    }
+  }, [user]);
+
+  const handleCreateDrawFolder = useCallback((name: string) => {
+    setDrawFolders(prev => [...prev, name]);
+  }, []);
+
+  const handleRenameDrawFolder = useCallback((oldName: string, newName: string) => {
+    setDrawFolders(prev => prev.map(f => f === oldName ? newName : f));
+    setDrawDocs(prev => prev.map(d => d.folder === oldName ? { ...d, folder: newName } : d));
+    if (selectedDrawFolder === oldName) setSelectedDrawFolder(newName);
+    if (user) {
+      drawDocs.filter(d => d.folder === oldName).forEach(d => {
+        updateDrawDocMeta(user.id, d.id, { folder: newName });
+      });
+    }
+  }, [selectedDrawFolder, user, drawDocs]);
+
+  const handleDeleteDrawFolder = useCallback((name: string) => {
+    setDrawFolders(prev => prev.filter(f => f !== name));
+    setDrawDocs(prev => prev.map(d => d.folder === name ? { ...d, folder: undefined } : d));
+    if (selectedDrawFolder === name) setSelectedDrawFolder(null);
+    if (user) {
+      drawDocs.filter(d => d.folder === name).forEach(d => {
+        updateDrawDocMeta(user.id, d.id, { folder: null });
+      });
+    }
+  }, [selectedDrawFolder, user, drawDocs]);
+
+  const handleMoveDrawToFolder = useCallback((docId: string, folder: string | undefined) => {
+    setDrawDocs(prev => prev.map(d =>
+      d.id === docId ? { ...d, folder, updatedAt: new Date().toISOString() } : d
+    ));
+    if (user) updateDrawDocMeta(user.id, docId, { folder: folder ?? null });
   }, [user]);
 
   const selectedNote = useMemo(() =>
@@ -384,6 +589,23 @@ export default function App() {
     if (user) updateNoteMeta(user.id, noteId, { folder: folder ?? null });
   }, [user]);
 
+  // Refresh bookmark list when switching to bookmark mode
+  useEffect(() => {
+    if (brandMode === 'bookmark' && user) {
+      fetchBookmarks(user.id).then(bks => {
+        setBookmarkList(bks);
+        // Also update folder map from Supabase data
+        const map: Record<string, string> = {};
+        for (const bk of bks) {
+          if (bk.folder) map[bk.id] = bk.folder;
+        }
+        setBookmarkFolderMap(map);
+        const folders = [...new Set(bks.map(b => b.folder).filter((f): f is string => !!f))];
+        if (folders.length > 0) setBookmarkFolders(prev => [...new Set([...prev, ...folders])]);
+      }).catch(err => console.error('[bookmarks] refresh failed', err));
+    }
+  }, [brandMode, user]);
+
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed(prev => !prev);
   }, []);
@@ -484,6 +706,35 @@ export default function App() {
           }
         }
       }).catch(err => console.error('[notes] fetch failed', err));
+
+      // Fetch bookmarks to rebuild folder assignments from Supabase
+      fetchBookmarks(userId).then(bks => {
+        setBookmarkList(bks);
+        const folders = [...new Set(bks.map(b => b.folder).filter((f): f is string => !!f))];
+        if (folders.length > 0) setBookmarkFolders(prev => [...new Set([...prev, ...folders])]);
+        const map: Record<string, string> = {};
+        for (const bk of bks) {
+          if (bk.folder) map[bk.id] = bk.folder;
+        }
+        setBookmarkFolderMap(map);
+      }).catch(err => console.error('[bookmarks] fetch folders failed', err));
+
+      // Fetch draw docs from Supabase
+      fetchDrawDocs(userId).then(rows => {
+        if (rows.length > 0) {
+          const docs: DrawDoc[] = rows.map(r => ({
+            id: r.id,
+            title: r.title,
+            content: r.content,
+            folder: r.folder ?? undefined,
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+          }));
+          setDrawDocs(docs);
+          const folders = [...new Set(docs.map(d => d.folder).filter((f): f is string => !!f))];
+          if (folders.length > 0) setDrawFolders(prev => [...new Set([...prev, ...folders])]);
+        }
+      }).catch(err => console.error('[draw-docs] fetch failed', err));
     }
     prevUserRef.current = userId;
   }, [user]);
@@ -683,8 +934,14 @@ export default function App() {
   const handleToggleBrand = useCallback(() => {
     setBrandTransition(true);
     // At the midpoint of the animation, switch the mode
+    // Free users skip editor and draw modes
     setTimeout(() => {
-      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux');
+      setBrandMode(m => {
+        if (isPro) {
+          return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux';
+        }
+        return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux';
+      });
       setSelectedNoteId(null);
       setSelectedBookmark(null);
       setSearchQuery('');
@@ -693,7 +950,7 @@ export default function App() {
     setTimeout(() => {
       setBrandTransition(false);
     }, 1200);
-  }, []);
+  }, [isPro]);
 
   const handleCloseSourcePanel = useCallback(() => {
     setSourcePanelOpen(false);
@@ -760,8 +1017,8 @@ export default function App() {
       { id: 'mode.flux', label: 'Mode SuperFlux', category: 'Modes', shortcut: 'Ctrl+1', action: () => handleBrandSwitch('flux') },
       { id: 'mode.bookmark', label: 'Mode SuperBookmark', category: 'Modes', shortcut: 'Ctrl+2', action: () => handleBrandSwitch('bookmark') },
       { id: 'mode.note', label: 'Mode SuperNote', category: 'Modes', shortcut: 'Ctrl+3', action: () => handleBrandSwitch('note') },
-      { id: 'mode.editor', label: 'Mode SuperEditor', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
-      { id: 'mode.draw', label: 'Mode SuperDraw', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
+      { id: 'mode.editor', label: isPro ? 'Mode SuperEditor' : 'Mode SuperEditor (Pro)', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
+      { id: 'mode.draw', label: isPro ? 'Mode SuperDraw' : 'Mode SuperDraw (Pro)', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
 
       // ── Feeds ──
       { id: 'feed.sync', label: 'Synchroniser tous les feeds', category: 'Feeds', shortcut: 'Ctrl+Shift+s', action: () => handleSyncAll() },
@@ -779,13 +1036,17 @@ export default function App() {
 
   // Brand switch helper (direct mode, with same animation as toggle)
   const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => {
+    if (!isPro && (mode === 'editor' || mode === 'draw')) {
+      showUpgradeModal();
+      return;
+    }
     setBrandTransition(true);
     setTimeout(() => {
       setBrandMode(mode);
       setSearchQuery('');
     }, 600);
     setTimeout(() => setBrandTransition(false), 1200);
-  }, []);
+  }, [isPro, showUpgradeModal]);
 
 
   // When some panels are closed, remaining open panels share the space via flex
@@ -875,6 +1136,31 @@ export default function App() {
                   onDeleteEditorFolder={handleDeleteEditorFolder}
                   onMoveDocToFolder={handleMoveDocToFolder}
                   onAddBookmark={handleAddBookmark}
+                  drawDocs={drawDocs}
+                  drawFolders={drawFolders}
+                  selectedDrawId={selectedDrawId}
+                  selectedDrawFolder={selectedDrawFolder}
+                  onSelectDraw={setSelectedDrawId}
+                  onSelectDrawFolder={setSelectedDrawFolder}
+                  onAddDraw={handleAddDraw}
+                  onDeleteDraw={handleDeleteDraw}
+                  onRenameDraw={handleRenameDraw}
+                  onCreateDrawFolder={handleCreateDrawFolder}
+                  onRenameDrawFolder={handleRenameDrawFolder}
+                  onDeleteDrawFolder={handleDeleteDrawFolder}
+                  onMoveDrawToFolder={handleMoveDrawToFolder}
+                  bookmarkFolders={bookmarkFolders}
+                  bookmarkFolderCounts={bookmarkFolderCounts}
+                  selectedBookmarkFolder={selectedBookmarkFolder}
+                  onSelectBookmarkFolder={setSelectedBookmarkFolder}
+                  onCreateBookmarkFolder={handleCreateBookmarkFolder}
+                  onRenameBookmarkFolder={handleRenameBookmarkFolder}
+                  onDeleteBookmarkFolder={handleDeleteBookmarkFolder}
+                  bookmarkItems={bookmarkList}
+                  bookmarkFolderMap={bookmarkFolderMap}
+                  selectedBookmarkId={selectedBookmark?.id ?? null}
+                  onSelectBookmark={handleSelectBookmark}
+                  bookmarkTotalCount={bookmarkList.length}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -900,7 +1186,11 @@ export default function App() {
                 ) : brandMode === 'bookmark' ? (
                   <BookmarkPanel
                     selectedBookmarkId={selectedBookmark?.id ?? null}
+                    selectedFolder={selectedBookmarkFolder}
+                    bookmarkFolderMap={bookmarkFolderMap}
+                    bookmarkFolders={bookmarkFolders}
                     onSelectBookmark={handleSelectBookmark}
+                    onMoveBookmarkToFolder={handleMoveBookmarkToFolder}
                   />
                 ) : brandMode === 'editor' || brandMode === 'draw' ? (
                   <div className="panel-empty-note" />
@@ -920,6 +1210,7 @@ export default function App() {
                     onToggleStar={store.toggleStar}
                     onToggleBookmark={store.toggleBookmark}
                     onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
+                    onSaveAsBookmark={user ? handleSaveItemAsBookmark : undefined}
                     onClose={handleCloseFeedPanel}
                   />
                 )}
@@ -943,7 +1234,7 @@ export default function App() {
               ) : brandMode === 'editor' ? (
                 <SuperEditor doc={selectedDoc} onUpdateContent={handleUpdateDocContent} onAddDoc={handleAddDoc} />
               ) : brandMode === 'draw' ? (
-                <SuperDraw />
+                <SuperDraw doc={selectedDraw} onUpdateContent={handleUpdateDrawContent} onAddDoc={handleAddDraw} />
               ) : brandMode === 'bookmark' ? (
                 <BookmarkReader
                   bookmark={selectedBookmark}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchBookmarks, removeBookmark, toggleBookmarkRead, type WebBookmark } from '../services/bookmarkService';
@@ -15,10 +15,18 @@ const sourceGradients: Record<string, string> = {
 
 interface BookmarkPanelProps {
   selectedBookmarkId?: string | null;
+  selectedFolder?: string | null;
+  bookmarkFolderMap?: Record<string, string>;
+  bookmarkFolders?: string[];
   onSelectBookmark?: (bookmark: WebBookmark) => void;
+  onMoveBookmarkToFolder?: (bookmarkId: string, folder: string | undefined) => void;
 }
 
-export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: BookmarkPanelProps) {
+type ContextMenuState =
+  | { kind: 'bookmark'; x: number; y: number; bookmarkId: string }
+  | null;
+
+export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFolderMap, bookmarkFolders, onSelectBookmark, onMoveBookmarkToFolder }: BookmarkPanelProps) {
   const { user } = useAuth();
   const [bookmarks, setBookmarks] = useState<WebBookmark[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +35,8 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
     try { return (localStorage.getItem('superflux_bk_viewmode') as ViewMode) || 'cards'; }
     catch { return 'cards'; }
   });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
+  const [folderSubmenuOpen, setFolderSubmenuOpen] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem('superflux_bk_viewmode', viewMode); }
@@ -43,6 +53,26 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
 
   useEffect(() => { load(); }, [load]);
 
+  // Close context menu on click/escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => { setContextMenu(null); setFolderSubmenuOpen(false); };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [contextMenu]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, bookmarkId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFolderSubmenuOpen(false);
+    setContextMenu({ kind: 'bookmark', x: e.clientX, y: e.clientY, bookmarkId });
+  }, []);
+
   const handleRemove = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
@@ -57,9 +87,15 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
     await toggleBookmarkRead(user.id, id, isRead);
   };
 
-  const filtered = filter === 'unread'
+  // Filter by read status
+  let filtered = filter === 'unread'
     ? bookmarks.filter(b => !b.is_read)
-    : bookmarks;
+    : [...bookmarks];
+
+  // Filter by selected folder
+  if (selectedFolder != null && bookmarkFolderMap) {
+    filtered = filtered.filter(b => bookmarkFolderMap[b.id] === selectedFolder);
+  }
 
   if (!user) {
     return (
@@ -139,6 +175,7 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
                 key={bk.id}
                 className={`bk-compact-item ${selectedBookmarkId === bk.id ? 'active' : ''} ${bk.is_read ? 'read' : ''}`}
                 onClick={() => onSelectBookmark?.(bk)}
+                onContextMenu={(e) => handleContextMenu(e, bk.id)}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.02, duration: 0.25 }}
@@ -192,6 +229,7 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
                 key={bk.id}
                 className={`bk-blob-card ${selectedBookmarkId === bk.id ? 'active' : ''} ${bk.is_read ? 'read' : ''}`}
                 onClick={() => onSelectBookmark?.(bk)}
+                onContextMenu={(e) => handleContextMenu(e, bk.id)}
                 initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.04, duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
@@ -276,6 +314,63 @@ export function BookmarkPanel({ selectedBookmarkId, onSelectBookmark }: Bookmark
           </div>
         )}
       </div>
+
+      {/* Bookmark context menu */}
+      {contextMenu?.kind === 'bookmark' && (
+        <div
+          className="feed-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x, position: 'fixed', zIndex: 1000 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="feed-context-menu-item"
+            onMouseEnter={() => setFolderSubmenuOpen(true)}
+            onMouseLeave={() => setFolderSubmenuOpen(false)}
+            style={{ position: 'relative' }}
+          >
+            <span className="feed-context-menu-icon">📁</span>
+            Dossier ›
+            {folderSubmenuOpen && (
+              <div
+                className="feed-context-menu"
+                style={{ position: 'absolute', left: '100%', top: 0, zIndex: 1001, minWidth: 140 }}
+              >
+                <button
+                  className={`feed-context-menu-item ${!bookmarkFolderMap?.[contextMenu.bookmarkId] ? 'active' : ''}`}
+                  onClick={() => {
+                    onMoveBookmarkToFolder?.(contextMenu.bookmarkId, undefined);
+                    setContextMenu(null);
+                  }}
+                >
+                  Aucun dossier
+                </button>
+                {(bookmarkFolders ?? []).map(folder => (
+                  <button
+                    key={folder}
+                    className={`feed-context-menu-item ${bookmarkFolderMap?.[contextMenu.bookmarkId] === folder ? 'active' : ''}`}
+                    onClick={() => {
+                      onMoveBookmarkToFolder?.(contextMenu.bookmarkId, folder);
+                      setContextMenu(null);
+                    }}
+                  >
+                    📁 {folder}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            className="feed-context-menu-item feed-context-menu-item--danger"
+            onClick={(e) => {
+              handleRemove(contextMenu.bookmarkId, e);
+              setContextMenu(null);
+            }}
+          >
+            <span className="feed-context-menu-icon">✕</span>
+            Supprimer
+          </button>
+        </div>
+      )}
     </div>
   );
 }

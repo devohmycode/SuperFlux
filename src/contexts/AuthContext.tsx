@@ -96,21 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    // Clear all user data from localStorage
-    const userDataKeys = [
-      'superflux_feeds',
-      'superflux_items',
-      'superflux_folders',
-      'superflux_favorites_order',
-      'superflux_readlater_order',
-      'superflux_highlights',
-      'superflux_notes',
-      'superflux_note_folders',
-      'superflux_editor_docs',
-      'superflux_editor_folders',
-      'superflux_last_sync',
-    ];
-    userDataKeys.forEach(key => localStorage.removeItem(key));
+    // Clear ALL user data from localStorage (every superflux_ key)
+    const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('superflux_'));
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    // Reload to reset all in-memory React state
+    window.location.reload();
   }, []);
 
   return (

@@ -12,9 +12,10 @@ import { UserMenu } from "./UserMenu";
 import { usePro } from "../contexts/ProContext";
 import { PRO_LIMITS } from "../services/licenseService";
 import { isRSSHubUrl } from "../services/rsshubService";
-import { Input } from "@headlessui/react";
 import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
+import { BookmarkSourceList } from "./BookmarkSourceList";
+import { DrawFileList } from "./DrawFileList";
 import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
@@ -85,6 +86,33 @@ interface SourcePanelProps {
   onMoveDocToFolder?: (docId: string, folder: string | undefined) => void;
   onAddBookmark?: (url: string) => void;
   onReorderFeed?: (feedId: string, targetFeedId: string, position: 'before' | 'after') => void;
+  // Bookmark folder props
+  bookmarkFolders?: string[];
+  bookmarkFolderCounts?: Record<string, number>;
+  selectedBookmarkFolder?: string | null;
+  onSelectBookmarkFolder?: (folder: string | null) => void;
+  onCreateBookmarkFolder?: (name: string) => void;
+  onRenameBookmarkFolder?: (oldName: string, newName: string) => void;
+  onDeleteBookmarkFolder?: (name: string) => void;
+  bookmarkItems?: import('../services/bookmarkService').WebBookmark[];
+  bookmarkFolderMap?: Record<string, string>;
+  selectedBookmarkId?: string | null;
+  onSelectBookmark?: (bookmark: import('../services/bookmarkService').WebBookmark) => void;
+  bookmarkTotalCount?: number;
+  // Draw mode props
+  drawDocs?: import('./DrawFileList').DrawDoc[];
+  drawFolders?: string[];
+  selectedDrawId?: string | null;
+  selectedDrawFolder?: string | null;
+  onSelectDraw?: (id: string) => void;
+  onSelectDrawFolder?: (folder: string | null) => void;
+  onAddDraw?: () => void;
+  onDeleteDraw?: (id: string) => void;
+  onRenameDraw?: (id: string, title: string) => void;
+  onCreateDrawFolder?: (name: string) => void;
+  onRenameDrawFolder?: (oldName: string, newName: string) => void;
+  onDeleteDrawFolder?: (name: string) => void;
+  onMoveDrawToFolder?: (docId: string, folder: string | undefined) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -208,7 +236,7 @@ export function SourcePanel({
   onMoveNoteToFolder,
   onDeleteNote,
   searchQuery = '',
-  onSearchChange,
+  onSearchChange: _onSearchChange,
   editorDocs = [],
   editorFolders = [],
   selectedDocId = null,
@@ -224,6 +252,31 @@ export function SourcePanel({
   onMoveDocToFolder,
   onAddBookmark,
   onReorderFeed,
+  bookmarkFolders,
+  bookmarkFolderCounts,
+  selectedBookmarkFolder,
+  onSelectBookmarkFolder,
+  onCreateBookmarkFolder,
+  onRenameBookmarkFolder,
+  onDeleteBookmarkFolder,
+  bookmarkItems,
+  bookmarkFolderMap,
+  selectedBookmarkId,
+  onSelectBookmark,
+  bookmarkTotalCount,
+  drawDocs = [],
+  drawFolders = [],
+  selectedDrawId = null,
+  selectedDrawFolder = null,
+  onSelectDraw,
+  onSelectDrawFolder,
+  onAddDraw,
+  onDeleteDraw,
+  onRenameDraw,
+  onCreateDrawFolder,
+  onRenameDrawFolder,
+  onDeleteDrawFolder,
+  onMoveDrawToFolder,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -678,8 +731,37 @@ export function SourcePanel({
               onMoveDocToFolder={onMoveDocToFolder}
             />
           ) : <div className="panel-empty-note" />
-        ) : brandMode === 'bookmark' || brandMode === 'draw' ? (
-          <div className="panel-empty-note" />
+        ) : brandMode === 'bookmark' ? (
+          <BookmarkSourceList
+            folders={bookmarkFolders ?? []}
+            folderCounts={bookmarkFolderCounts ?? {}}
+            selectedFolder={selectedBookmarkFolder ?? null}
+            onSelectFolder={onSelectBookmarkFolder ?? (() => {})}
+            onCreateFolder={onCreateBookmarkFolder ?? (() => {})}
+            onRenameFolder={onRenameBookmarkFolder ?? (() => {})}
+            onDeleteFolder={onDeleteBookmarkFolder ?? (() => {})}
+            bookmarks={bookmarkItems}
+            bookmarkFolderMap={bookmarkFolderMap}
+            selectedBookmarkId={selectedBookmarkId}
+            onSelectBookmark={onSelectBookmark}
+            totalCount={bookmarkTotalCount}
+          />
+        ) : brandMode === 'draw' ? (
+          <DrawFileList
+            docs={drawDocs}
+            folders={drawFolders}
+            selectedDocId={selectedDrawId}
+            selectedFolder={selectedDrawFolder}
+            onSelectDoc={onSelectDraw ?? (() => {})}
+            onSelectFolder={onSelectDrawFolder ?? (() => {})}
+            onAddDoc={onAddDraw ?? (() => {})}
+            onDeleteDoc={onDeleteDraw ?? (() => {})}
+            onRenameDoc={onRenameDraw ?? (() => {})}
+            onCreateFolder={onCreateDrawFolder ?? (() => {})}
+            onRenameFolder={onRenameDrawFolder ?? (() => {})}
+            onDeleteFolder={onDeleteDrawFolder ?? (() => {})}
+            onMoveDocToFolder={onMoveDrawToFolder ?? (() => {})}
+          />
         ) : (
         <>
         <button
@@ -801,21 +883,24 @@ export function SourcePanel({
       {onBrandSwitch && (
         <div className="mode-tab-bar">
           {([
-            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1' },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2' },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3' },
-            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4' },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5' },
-          ]).map(tab => (
-            <button
-              key={tab.mode}
-              className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''}`}
-              onClick={() => onBrandSwitch(tab.mode)}
-              title={`${tab.label} (Ctrl+${tab.shortcut})`}
-            >
-              <span className="mode-tab-icon">{tab.icon}</span>
-            </button>
-          ))}
+            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false },
+            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true },
+          ]).map(tab => {
+            const locked = tab.pro && !isPro;
+            return (
+              <button
+                key={tab.mode}
+                className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''} ${locked ? 'mode-tab--locked' : ''}`}
+                onClick={() => onBrandSwitch(tab.mode)}
+                title={locked ? `${tab.label} (Pro)` : `${tab.label} (Ctrl+${tab.shortcut})`}
+              >
+                <span className="mode-tab-icon">{locked ? '🔒' : tab.icon}</span>
+              </button>
+            );
+          })}
           <span className="mode-tab-kbd" title="Recherche / Commandes">Ctrl+K</span>
         </div>
       )}
