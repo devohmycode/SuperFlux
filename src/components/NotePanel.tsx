@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
 import GradientText from './GradientText';
+import GlassIconButton from './GlassIconButton';
 import { NoteStickyBoard } from './NoteStickyBoard';
 
 export interface Note {
@@ -61,20 +62,20 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
           )}
         </div>
         <div className="note-panel-actions">
-          <button
-            className={`feed-action-btn ${viewMode === 'cards' ? 'active' : ''}`}
+          <GlassIconButton
+            color="orange"
+            icon="▦"
             title="Vue cartes"
             onClick={() => setViewMode('cards')}
-          >
-            ▦
-          </button>
-          <button
-            className={`feed-action-btn ${viewMode === 'board' ? 'active' : ''}`}
+            active={viewMode === 'cards'}
+          />
+          <GlassIconButton
+            color="indigo"
+            icon="▤"
             title="Vue post-its"
             onClick={() => setViewMode('board')}
-          >
-            ▤
-          </button>
+            active={viewMode === 'board'}
+          />
         </div>
       </div>
 

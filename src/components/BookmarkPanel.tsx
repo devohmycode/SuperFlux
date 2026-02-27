@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchBookmarks, removeBookmark, toggleBookmarkRead, type WebBookmark } from '../services/bookmarkService';
 import GradientText from './GradientText';
+import GlassIconButton from './GlassIconButton';
 
 type ViewMode = 'cards' | 'compact';
 
@@ -124,35 +125,40 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
           )}
         </div>
         <div className="bookmark-panel-actions">
-          <button
-            className={`bookmark-filter-btn ${filter === 'all' ? 'active' : ''}`}
+          <GlassIconButton
+            color="blue"
+            icon="✱"
+            title="Tous les bookmarks"
             onClick={() => setFilter('all')}
-          >
-            Tous
-          </button>
-          <button
-            className={`bookmark-filter-btn ${filter === 'unread' ? 'active' : ''}`}
+            active={filter === 'all'}
+          />
+          <GlassIconButton
+            color="indigo"
+            icon="○"
+            title="Non lus uniquement"
             onClick={() => setFilter('unread')}
-          >
-            Non lus
-          </button>
-          <button
-            className={`bookmark-view-btn ${viewMode === 'cards' ? 'active' : ''}`}
+            active={filter === 'unread'}
+          />
+          <GlassIconButton
+            color="orange"
+            icon="▦"
             title="Vue cartes"
             onClick={() => setViewMode('cards')}
-          >
-            ▦
-          </button>
-          <button
-            className={`bookmark-view-btn ${viewMode === 'compact' ? 'active' : ''}`}
+            active={viewMode === 'cards'}
+          />
+          <GlassIconButton
+            color="green"
+            icon="☰"
             title="Vue compacte"
             onClick={() => setViewMode('compact')}
-          >
-            ☰
-          </button>
-          <button className="bookmark-refresh-btn" onClick={load} title="Actualiser">
-            ↻
-          </button>
+            active={viewMode === 'compact'}
+          />
+          <GlassIconButton
+            color="purple"
+            icon="↻"
+            title="Actualiser"
+            onClick={load}
+          />
         </div>
       </div>
 

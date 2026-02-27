@@ -7,6 +7,7 @@ import { summarizeDigest } from '../services/llmService';
 import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
 import GradientText from './GradientText';
 import SpotlightCard from './SpotlightCard';
+import GlassIconButton from './GlassIconButton';
 
 const ITEMS_PER_PAGE_NORMAL = 10;
 const ITEMS_PER_PAGE_COMPACT = 20;
@@ -346,50 +347,55 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
           )}
         </div>
         <div className="feed-panel-actions">
-          <button
-            className={`feed-action-btn ${digestState === 'loading' ? 'loading' : ''}`}
+          <GlassIconButton
+            color="purple"
+            icon={digestState === 'loading' ? <span className="btn-spinner" /> : isPro ? '✦' : '🔒'}
             title={isPro ? "Résumer l'actualité" : "Résumer (Pro)"}
             onClick={isPro ? handleDigest : showUpgradeModal}
             disabled={digestState === 'loading' || items.length === 0}
-          >
-            {digestState === 'loading' ? <span className="btn-spinner" /> : isPro ? '✦' : '🔒'}
-          </button>
-          <button
-            className={`feed-action-btn ${translateActive ? 'active' : ''}`}
+          />
+          <GlassIconButton
+            color="blue"
+            icon={translateLoading ? <span className="btn-spinner" /> : '🌐'}
             title={translateActive ? 'Voir les originaux' : 'Traduire la liste'}
             onClick={handleTranslateList}
             disabled={translateLoading || items.length === 0}
-          >
-            {translateLoading ? <span className="btn-spinner" /> : '🌐'}
-          </button>
-          <button
-            className="feed-action-btn"
+            active={translateActive}
+          />
+          <GlassIconButton
+            color="green"
+            icon={
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                {unreadCount > 0 ? (
+                  <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                ) : (
+                  <circle cx="6" cy="6" r="4.5" fill="currentColor" stroke="currentColor" strokeWidth="1.4" />
+                )}
+              </svg>
+            }
             title={unreadCount > 0 ? 'Tout marquer comme lu' : 'Tout marquer comme non lu'}
             onClick={unreadCount > 0 ? onMarkAllAsRead : onMarkAllAsUnread}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12">
-              {unreadCount > 0 ? (
-                <circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-              ) : (
-                <circle cx="6" cy="6" r="4.5" fill="currentColor" stroke="currentColor" strokeWidth="1.4" />
-              )}
-            </svg>
-          </button>
-          <button
-            className={`feed-action-btn ${viewMode === 'cards' ? 'active' : ''}`}
+          />
+          <GlassIconButton
+            color="orange"
+            icon="▦"
             title="Vue cartes"
             onClick={() => setViewMode(viewMode === 'cards' ? 'normal' : 'cards')}
-          >
-            ▦
-          </button>
-          <button
-            className={`feed-action-btn ${compact ? 'active' : ''}`}
+            active={viewMode === 'cards'}
+          />
+          <GlassIconButton
+            color="indigo"
+            icon={compact ? '☰' : '≡'}
             title={compact ? 'Vue normale' : 'Vue compacte'}
             onClick={() => setViewMode(viewMode === 'compact' ? 'normal' : 'compact')}
-          >
-            {compact ? '☰' : '≡'}
-          </button>
-          <button className="panel-close-btn" title="Fermer le panneau (2)" onClick={onClose}>✕</button>
+            active={compact}
+          />
+          <GlassIconButton
+            color="red"
+            icon="✕"
+            title="Fermer le panneau (2)"
+            onClick={onClose}
+          />
         </div>
       </div>
 
