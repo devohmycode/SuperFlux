@@ -206,6 +206,13 @@ SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks
 | AI | [Groq](https://groq.com/) / [Ollama](https://ollama.com/) |
 | TTS | Web Speech API / Native OS / [ElevenLabs](https://elevenlabs.io/) |
 
+
+## Additional applications
+
+[Plugins Chrome & Firefox](https://github.com/devohmycode/SuperFlux-Plugin)
+
+[Android APK](https://github.com/devohmycode/SuperFluxDroid)
+
 ## Getting Started
 
 ### Prerequisites
