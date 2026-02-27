@@ -3,7 +3,7 @@
 import { supabase } from '../lib/supabase';
 
 export const PRO_LIMITS = {
-  maxFeeds: 20,
+  maxFeeds: 10,
   maxFolders: 5,
 } as const;
 
