@@ -80,6 +80,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.20.0
         version: 3.20.0
+      '@tiptap/suggestion':
+        specifier: ^3.20.0
+        version: 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
