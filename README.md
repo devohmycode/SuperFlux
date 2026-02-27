@@ -187,8 +187,9 @@ SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks
 
 - Unlimited AI summaries (article + feed digest)
 - Text highlighting and notes
-- 50+ feeds (vs limited in free)
-- 10+ folders for organization
+- Illimited feeds (vs 10 in free)
+- Illimited folders for organization (vs 5 in free)
+- TTS Elevenlab
 - Early access to new features
 
 ## Tech Stack
