@@ -20,6 +20,7 @@ import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
 import ShinyText from "./ShinyText";
+import GlassIconButton from "./GlassIconButton";
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -883,25 +884,25 @@ export function SourcePanel({
       {onBrandSwitch && (
         <div className="mode-tab-bar">
           {([
-            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false },
-            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true },
+            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false, color: 'blue' },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'green' },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'orange' },
+            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'indigo' },
           ]).map(tab => {
             const locked = tab.pro && !isPro;
             return (
-              <button
+              <GlassIconButton
                 key={tab.mode}
-                className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''} ${locked ? 'mode-tab--locked' : ''}`}
+                color={locked ? 'red' : tab.color}
+                icon={locked ? '🔒' : tab.icon}
+                active={brandMode === tab.mode}
                 onClick={() => onBrandSwitch(tab.mode)}
                 title={locked ? `${tab.label} (Pro)` : `${tab.label} (Ctrl+${tab.shortcut})`}
-              >
-                <span className="mode-tab-icon">{locked ? '🔒' : tab.icon}</span>
-              </button>
+                className={locked ? 'mode-tab--locked' : ''}
+              />
             );
           })}
-          <span className="mode-tab-kbd" title="Recherche / Commandes">Ctrl+K</span>
         </div>
       )}
 

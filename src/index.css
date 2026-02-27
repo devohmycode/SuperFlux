@@ -694,9 +694,25 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: 8px;
+    padding: 6px 10px;
     flex-shrink: 0;
+    overflow: visible;
+}
+.mode-tab-bar .glass-icon-btn {
+    width: 28px;
+    height: 28px;
+}
+.mode-tab-bar .glass-icon-bg {
+    border-radius: 8px;
+}
+.mode-tab-bar .glass-icon-front {
+    border-radius: 8px;
+}
+.mode-tab-bar .glass-icon-inner {
+    width: 15px;
+    height: 15px;
+    font-size: 12px;
 }
 
 .mode-tab {
@@ -733,6 +749,9 @@ body {
 }
 .mode-tab--locked .mode-tab-icon {
     font-size: 12px;
+}
+.glass-icon-btn.mode-tab--locked {
+    opacity: 0.45;
 }
 
 .mode-tab-icon {
@@ -832,7 +851,8 @@ body {
 .bookmark-panel-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 10px;
+    overflow: visible;
 }
 
 .bookmark-filter-btn {
@@ -1649,7 +1669,8 @@ body {
 .note-panel-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 10px;
+    overflow: visible;
 }
 
 .note-panel-list {
@@ -3501,7 +3522,8 @@ body {
 .feed-panel-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 10px;
+    overflow: visible;
 }
 
 .feed-action-btn {
@@ -3522,6 +3544,82 @@ body {
 .feed-action-btn:hover {
     background: var(--bg-hover);
     color: var(--text-secondary);
+}
+
+/* ─── Glass Icon Buttons (3D folder-open effect) ─── */
+
+.glass-icon-btn {
+    position: relative;
+    background: transparent;
+    outline: none;
+    border: none;
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    perspective: 120px;
+    transform-style: preserve-3d;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+}
+
+/* Colored tilted background */
+.glass-icon-bg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    display: block;
+    transform: rotate(12deg);
+    transform-origin: 100% 100%;
+    transition: opacity 0.3s cubic-bezier(0.83, 0, 0.17, 1), transform 0.3s cubic-bezier(0.83, 0, 0.17, 1);
+    will-change: transform;
+    box-shadow: 4px -4px 8px hsla(223, 10%, 10%, 0.13);
+}
+.glass-icon-btn:hover .glass-icon-bg {
+    transform: rotate(20deg) translate3d(-3px, -3px, 3px);
+}
+
+/* Frosted glass front face */
+.glass-icon-front {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+    background: hsla(0, 0%, 100%, 0.18);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    transform-origin: 80% 50%;
+    transition: opacity 0.3s cubic-bezier(0.83, 0, 0.17, 1), transform 0.3s cubic-bezier(0.83, 0, 0.17, 1);
+    will-change: transform;
+    box-shadow: inset 0 0 0 1px hsla(0, 0%, 100%, 0.3);
+}
+.glass-icon-btn:hover .glass-icon-front {
+    transform: translate3d(0, 0, 14px);
+}
+
+/* Icon inside */
+.glass-icon-inner {
+    margin: auto;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+}
+.glass-icon-inner svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Active ring */
+.glass-icon-btn.active .glass-icon-front {
+    box-shadow: inset 0 0 0 1px hsla(0, 0%, 100%, 0.5), 0 0 0 2px hsla(0, 0%, 100%, 0.25);
 }
 
 /* Feed list */
@@ -4066,7 +4164,8 @@ body {
         -4px -4px 16px rgba(255, 255, 255, 0.6);
 }
 
-.dark .feed-blob-card {
+.dark .feed-blob-card,
+.amoled .feed-blob-card {
     box-shadow:
         6px 6px 24px rgba(0, 0, 0, 0.4),
         -4px -4px 16px rgba(255, 255, 255, 0.03);
@@ -4098,7 +4197,8 @@ body {
     z-index: 0;
 }
 
-.dark .feed-blob-card__blob {
+.dark .feed-blob-card__blob,
+.amoled .feed-blob-card__blob {
     opacity: 0.7;
 }
 
@@ -4118,7 +4218,8 @@ body {
     overflow: hidden;
 }
 
-.dark .feed-blob-card__glass {
+.dark .feed-blob-card__glass,
+.amoled .feed-blob-card__glass {
     background: rgba(15, 15, 18, 0.82);
     outline-color: rgba(255, 255, 255, 0.06);
 }
@@ -4223,7 +4324,8 @@ body {
     white-space: nowrap;
 }
 
-.dark .feed-blob-card__tag {
+.dark .feed-blob-card__tag,
+.amoled .feed-blob-card__tag {
     background: rgba(255, 255, 255, 0.06);
 }
 

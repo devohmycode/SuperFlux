@@ -33,6 +33,24 @@ function getTextContent(parent: Element, tagName: string): string {
   return el?.textContent?.trim() || '';
 }
 
+/** Get HTML content from an Atom element with type="html" (returns innerHTML decoded) */
+function getHtmlContent(parent: Element, tagName: string): string {
+  const el = parent.querySelector(tagName);
+  if (!el) return '';
+  const type = el.getAttribute('type');
+  if (type === 'html') {
+    // HTML is stored escaped as text content — textContent gives us the decoded HTML string
+    return el.textContent?.trim() || '';
+  }
+  // For type="xhtml", content is inline XML — serialize child nodes
+  if (type === 'xhtml') {
+    const serializer = new XMLSerializer();
+    return Array.from(el.childNodes).map(n => serializer.serializeToString(n)).join('');
+  }
+  // Fallback: return innerHTML which preserves markup for other cases
+  return el.innerHTML?.trim() || '';
+}
+
 function parseRSSDate(dateStr: string): Date {
   if (!dateStr) return new Date();
   const parsed = new Date(dateStr);
@@ -134,7 +152,7 @@ function parseAtomFeed(xml: Document): RSSChannel {
       description: getTextContent(entry, 'summary'),
       pubDate: getTextContent(entry, 'published') || getTextContent(entry, 'updated'),
       author: entry.querySelector('author name')?.textContent || '',
-      content: getTextContent(entry, 'content') || getTextContent(entry, 'summary'),
+      content: getHtmlContent(entry, 'content') || getTextContent(entry, 'content') || getTextContent(entry, 'summary'),
       guid: getTextContent(entry, 'id') || link,
     };
   });
