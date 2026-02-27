@@ -728,6 +728,13 @@ body {
     color: var(--accent, #d4a853);
 }
 
+.mode-tab--locked {
+    opacity: 0.4;
+}
+.mode-tab--locked .mode-tab-icon {
+    font-size: 12px;
+}
+
 .mode-tab-icon {
     font-size: 15px;
     line-height: 1;

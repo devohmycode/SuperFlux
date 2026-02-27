@@ -883,21 +883,24 @@ export function SourcePanel({
       {onBrandSwitch && (
         <div className="mode-tab-bar">
           {([
-            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1' },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2' },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3' },
-            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4' },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5' },
-          ]).map(tab => (
-            <button
-              key={tab.mode}
-              className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''}`}
-              onClick={() => onBrandSwitch(tab.mode)}
-              title={`${tab.label} (Ctrl+${tab.shortcut})`}
-            >
-              <span className="mode-tab-icon">{tab.icon}</span>
-            </button>
-          ))}
+            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false },
+            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true },
+          ]).map(tab => {
+            const locked = tab.pro && !isPro;
+            return (
+              <button
+                key={tab.mode}
+                className={`mode-tab ${brandMode === tab.mode ? 'mode-tab--active' : ''} ${locked ? 'mode-tab--locked' : ''}`}
+                onClick={() => onBrandSwitch(tab.mode)}
+                title={locked ? `${tab.label} (Pro)` : `${tab.label} (Ctrl+${tab.shortcut})`}
+              >
+                <span className="mode-tab-icon">{locked ? '🔒' : tab.icon}</span>
+              </button>
+            );
+          })}
           <span className="mode-tab-kbd" title="Recherche / Commandes">Ctrl+K</span>
         </div>
       )}

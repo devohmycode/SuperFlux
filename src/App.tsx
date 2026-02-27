@@ -24,6 +24,7 @@ import { useResizablePanels } from './hooks/useResizablePanels';
 import { useFeedStore, type FeedStoreCallbacks } from './hooks/useFeedStore';
 import { useHighlightStore } from './hooks/useHighlightStore';
 import { useAuth } from './contexts/AuthContext';
+import { usePro } from './contexts/ProContext';
 import { SyncService, SYNC_ERROR_EVENT } from './services/syncService';
 import { getProviderConfig, ProviderSyncService } from './services/providerSync';
 import type { NewFeedData } from './components/AddFeedModal';
@@ -53,6 +54,7 @@ function getSyncInterval(): number {
 
 export default function App() {
   const { user } = useAuth();
+  const { isPro, showUpgradeModal } = usePro();
   const { commands, registerCommands, paletteOpen, closePalette, helpOpen, toggleHelp, closeHelp } = useCommands();
 
   // Sync callbacks wired to SyncService (fire-and-forget, errors logged)
@@ -932,8 +934,14 @@ export default function App() {
   const handleToggleBrand = useCallback(() => {
     setBrandTransition(true);
     // At the midpoint of the animation, switch the mode
+    // Free users skip editor and draw modes
     setTimeout(() => {
-      setBrandMode(m => m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux');
+      setBrandMode(m => {
+        if (isPro) {
+          return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux';
+        }
+        return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux';
+      });
       setSelectedNoteId(null);
       setSelectedBookmark(null);
       setSearchQuery('');
@@ -942,7 +950,7 @@ export default function App() {
     setTimeout(() => {
       setBrandTransition(false);
     }, 1200);
-  }, []);
+  }, [isPro]);
 
   const handleCloseSourcePanel = useCallback(() => {
     setSourcePanelOpen(false);
@@ -1009,8 +1017,8 @@ export default function App() {
       { id: 'mode.flux', label: 'Mode SuperFlux', category: 'Modes', shortcut: 'Ctrl+1', action: () => handleBrandSwitch('flux') },
       { id: 'mode.bookmark', label: 'Mode SuperBookmark', category: 'Modes', shortcut: 'Ctrl+2', action: () => handleBrandSwitch('bookmark') },
       { id: 'mode.note', label: 'Mode SuperNote', category: 'Modes', shortcut: 'Ctrl+3', action: () => handleBrandSwitch('note') },
-      { id: 'mode.editor', label: 'Mode SuperEditor', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
-      { id: 'mode.draw', label: 'Mode SuperDraw', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
+      { id: 'mode.editor', label: isPro ? 'Mode SuperEditor' : 'Mode SuperEditor (Pro)', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
+      { id: 'mode.draw', label: isPro ? 'Mode SuperDraw' : 'Mode SuperDraw (Pro)', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
 
       // ── Feeds ──
       { id: 'feed.sync', label: 'Synchroniser tous les feeds', category: 'Feeds', shortcut: 'Ctrl+Shift+s', action: () => handleSyncAll() },
@@ -1028,13 +1036,17 @@ export default function App() {
 
   // Brand switch helper (direct mode, with same animation as toggle)
   const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => {
+    if (!isPro && (mode === 'editor' || mode === 'draw')) {
+      showUpgradeModal();
+      return;
+    }
     setBrandTransition(true);
     setTimeout(() => {
       setBrandMode(mode);
       setSearchQuery('');
     }, 600);
     setTimeout(() => setBrandTransition(false), 1200);
-  }, []);
+  }, [isPro, showUpgradeModal]);
 
 
   // When some panels are closed, remaining open panels share the space via flex
