@@ -4,6 +4,12 @@ import type { Feed, FeedItem, FeedSource } from '../types';
 // Custom event dispatched after remote data is merged into localStorage
 const SYNC_EVENT = 'superflux-sync-update';
 
+// Storage mode guard: skip Supabase calls when user chose local-only storage
+const STORAGE_MODE_KEY = 'superflux_storage_mode';
+function isLocalMode(): boolean {
+  return localStorage.getItem(STORAGE_MODE_KEY) === 'local';
+}
+
 function dispatchSyncEvent() {
   window.dispatchEvent(new CustomEvent(SYNC_EVENT));
 }
@@ -46,6 +52,7 @@ function feedToRow(feed: Feed, userId: string) {
     url: feed.url,
     color: feed.color,
     updated_at: feed.updated_at ?? new Date().toISOString(),
+    notify_on_new: feed.notifyOnNew ?? false,
   };
 }
 
@@ -60,6 +67,7 @@ function rowToFeed(row: Record<string, unknown>): Feed {
     color: row.color as string ?? '',
     updated_at: row.updated_at as string,
     folder: (row.folder as string) || undefined,
+    notifyOnNew: (row.notify_on_new as boolean | undefined) ?? false,
   };
 }
 
@@ -203,6 +211,7 @@ export const SyncService = {
    * Writes result to localStorage then dispatches a reload event.
    */
   async fullSync(): Promise<void> {
+    if (isLocalMode()) return;
     if (!isSupabaseConfigured || !_currentUserId) return;
 
     const userId = _currentUserId;
@@ -381,6 +390,7 @@ export const SyncService = {
 
   /** Push a single feed to remote immediately */
   async pushFeed(feed: Feed): Promise<void> {
+    if (isLocalMode()) return;
     if (!isSupabaseConfigured) {
       console.warn('[sync] pushFeed skipped: Supabase not configured');
       return;
@@ -414,6 +424,7 @@ export const SyncService = {
 
   /** Delete a feed from remote immediately */
   async deleteFeed(feedId: string): Promise<void> {
+    if (isLocalMode()) return;
     if (!isSupabaseConfigured || !_currentUserId) return;
     const { error } = await supabase
       .from('feeds')
@@ -425,14 +436,32 @@ export const SyncService = {
 
   /** Queue an item status change (debounced 2s) */
   queueItemUpdate(item: FeedItem): void {
+    if (isLocalMode()) return;
     if (!isSupabaseConfigured || !_currentUserId) return;
     _pendingItemUpdates.set(item.id, { ...item, updated_at: new Date().toISOString() });
     if (_debounceTimer) clearTimeout(_debounceTimer);
     _debounceTimer = setTimeout(_flushItemUpdates, 2000);
   },
 
+  /** Delete items from Supabase by IDs (batch 500) */
+  async deleteItems(itemIds: string[]): Promise<void> {
+    if (isLocalMode()) return;
+    if (!isSupabaseConfigured || !_currentUserId || itemIds.length === 0) return;
+    const userId = _currentUserId;
+    for (let i = 0; i < itemIds.length; i += 500) {
+      const batch = itemIds.slice(i, i + 500);
+      const { error } = await supabase
+        .from('feed_items')
+        .delete()
+        .in('id', batch)
+        .eq('user_id', userId);
+      if (error) dispatchSyncError('deleteItems batch', error);
+    }
+  },
+
   /** Push new items after RSS sync (batch 500) */
   async pushNewItems(items: FeedItem[]): Promise<void> {
+    if (isLocalMode()) return;
     if (!isSupabaseConfigured || !_currentUserId) return;
     const userId = _currentUserId;
 

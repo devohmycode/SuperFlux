@@ -104,3 +104,50 @@ export async function translateText(
 
   return results.join(' ');
 }
+
+/**
+ * Raw translation: no HTML stripping, accepts explicit source language.
+ * Returns translated text + detected source language.
+ */
+export async function translateRaw(
+  text: string,
+  sourceLang: string,
+  targetLang: string,
+): Promise<{ text: string; detectedLang: string }> {
+  if (!text.trim()) return { text: '', detectedLang: sourceLang };
+
+  const chunks = splitIntoChunks(text);
+  const results: string[] = [];
+  let detectedLang = sourceLang;
+
+  for (const chunk of chunks) {
+    const sl = encodeURIComponent(sourceLang);
+    const tl = encodeURIComponent(targetLang);
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(chunk)}`;
+
+    const res = await httpRequest({ method: 'GET', url });
+
+    if (res.status !== 200) {
+      throw new Error(`Erreur de traduction (${res.status})`);
+    }
+
+    const data = JSON.parse(res.body);
+    if (!Array.isArray(data) || !Array.isArray(data[0])) {
+      throw new Error('Réponse inattendue du service de traduction');
+    }
+
+    const translated = data[0]
+      .filter((seg: unknown) => Array.isArray(seg) && seg[0])
+      .map((seg: unknown[]) => seg[0] as string)
+      .join('');
+
+    results.push(translated);
+
+    // Capture detected language from response (index 2)
+    if (typeof data[2] === 'string') {
+      detectedLang = data[2];
+    }
+  }
+
+  return { text: results.join(' '), detectedLang };
+}

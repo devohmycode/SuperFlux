@@ -2,12 +2,19 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, USER_AGENT};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
+
+mod clipboard;
+mod clipboard_history;
+mod snippets;
 #[cfg(not(target_os = "android"))]
 use tauri::{LogicalSize, PhysicalPosition, PhysicalSize};
 #[cfg(not(target_os = "android"))]
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 use tauri::Manager;
+use tauri::tray::TrayIconBuilder;
+#[cfg(not(target_os = "android"))]
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use url::Url;
 
 const RSS_USER_AGENT: &str = "SuperFlux/1.0 (RSS Reader; +https://github.com/user/superflux)";
@@ -408,6 +415,14 @@ fn expand_window(window: tauri::WebviewWindow, state: tauri::State<'_, AppState>
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+fn hide_to_tray(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|e| format!("hide: {e}"))?;
+    eprintln!("[tray] window hidden");
+    Ok(())
+}
+
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn collapse_window() -> Result<(), String> {
@@ -417,6 +432,12 @@ fn collapse_window() -> Result<(), String> {
 #[cfg(target_os = "android")]
 #[tauri::command]
 fn expand_window() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+fn hide_to_tray() -> Result<(), String> {
     Ok(())
 }
 
@@ -626,6 +647,27 @@ async fn open_auth_window(_url: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Save file dialog (export) ─────────────────────────────────────────
+
+#[tauri::command]
+async fn save_file_dialog(content: String, default_name: String) -> Result<bool, String> {
+    let dialog = rfd::AsyncFileDialog::new()
+        .set_file_name(&default_name)
+        .add_filter("JSON", &["json"])
+        .save_file()
+        .await;
+
+    match dialog {
+        Some(handle) => {
+            let path = handle.path();
+            std::fs::write(path, content.as_bytes())
+                .map_err(|e| format!("Failed to write file: {e}"))?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
 // ── Pandoc integration ───────────────────────────────────────────────
 
 #[tauri::command]
@@ -716,15 +758,82 @@ fn pandoc_export(html_content: String, format: String) -> Result<String, String>
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window, pandoc_check, pandoc_import, pandoc_export])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, hide_to_tray, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window, save_file_dialog, pandoc_check, pandoc_import, pandoc_export, snippets::sync_snippets, snippets::set_snippet_shortcut, clipboard_history::get_clipboard_history, clipboard_history::delete_clip_entry, clipboard_history::clear_clipboard_history, clipboard_history::toggle_pin_clip_entry, clipboard_history::paste_clip_entry, clipboard_history::set_clip_shortcut, clipboard_history::get_clipboard_settings, clipboard_history::set_clipboard_settings])
         .setup(|_app| {
+            // Initialize snippet store and start global keyboard hook
+            let snippet_store = Arc::new(snippets::SnippetStore::new());
+            _app.manage(snippet_store.clone());
+            snippets::start_keyword_expander(snippet_store);
+
+            // Initialize clipboard history store and start monitor
+            let clip_store = Arc::new(clipboard_history::ClipboardHistoryStore::new());
+            if let Some(data_dir) = _app.path().app_data_dir().ok() {
+                let _ = std::fs::create_dir_all(&data_dir);
+                clip_store.set_data_dir(data_dir);
+            }
+            _app.manage(clip_store.clone());
+            clipboard_history::start_clipboard_monitor(clip_store.clone(), _app.handle().clone());
+
+            // Re-register saved clip shortcuts on startup
+            #[cfg(not(target_os = "android"))]
+            {
+                let shortcutted = clip_store.get_shortcutted();
+                let mut registered = 0;
+                for entry in &shortcutted {
+                    if let Some(ref sc) = entry.shortcut {
+                        if clipboard_history::register_clip_shortcut(
+                            _app.handle(),
+                            sc,
+                            entry.id.clone(),
+                            clip_store.clone(),
+                        ).is_ok() {
+                            registered += 1;
+                        } else {
+                            eprintln!("[clipboard_history] Failed to re-register shortcut '{}'", sc);
+                        }
+                    }
+                }
+                if registered > 0 {
+                    eprintln!("[clipboard_history] Re-registered {} clip shortcuts", registered);
+                }
+            }
+
             #[cfg(not(target_os = "android"))]
             {
                 let window = _app.get_webview_window("main").expect("main window not found");
+
+                // System tray: click to show/restore the window
+                let tray_window = window.clone();
+                TrayIconBuilder::new()
+                    .icon(_app.default_window_icon().cloned().expect("no app icon"))
+                    .tooltip("SuperFlux")
+                    .on_tray_icon_event(move |_tray, event| {
+                        if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                            let _ = tray_window.show();
+                            let _ = tray_window.set_focus();
+                        }
+                    })
+                    .build(_app)?;
+
+                // Global shortcut Ctrl+L: toggle window visibility (hide to tray / restore)
+                let gs_window = window.clone();
+                _app.global_shortcut().on_shortcut("ctrl+l", move |_app, _shortcut, event| {
+                    if let ShortcutState::Pressed = event.state {
+                        if gs_window.is_visible().unwrap_or(true) {
+                            let _ = gs_window.hide();
+                        } else {
+                            let _ = gs_window.show();
+                            let _ = gs_window.set_focus();
+                        }
+                    }
+                })?;
+
                 window.set_minimizable(true).ok();
                 window.set_maximizable(true).ok();
                 window.set_closable(true).ok();

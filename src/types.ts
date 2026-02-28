@@ -25,6 +25,7 @@ export interface Feed {
   folder?: string;
   remoteId?: string;       // ID du feed côté provider
   providerType?: string;   // 'miniflux' | 'freshrss' | etc.
+  notifyOnNew?: boolean;   // Afficher une notification pour chaque nouvel article
 }
 
 export interface FeedItem {

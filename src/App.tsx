@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { SourcePanel, getPinnedItems, type PinEntry } from './components/SourcePanel';
 import { FeedPanel } from './components/FeedPanel';
 import { ReaderPanel } from './components/ReaderPanel';
@@ -6,6 +7,12 @@ import { NotePanel, type Note } from './components/NotePanel';
 import { NoteEditor } from './components/NoteEditor';
 import { SuperEditor } from './components/SuperEditor';
 import { SuperDraw } from './components/SuperDraw';
+import { SuperTranslate } from './components/SuperTranslate';
+import { SuperExpander, resolveSnippet } from './components/SuperExpander';
+import { SuperClipboard } from './components/SuperClipboard';
+import type { ClipEntry } from './components/ClipboardHistoryList';
+import { getClipClickAction } from './components/ClipboardSettingsPanel';
+import { type Snippet, loadSnippets, saveSnippets } from './components/ExpanderFileList';
 import { type EditorDoc, loadEditorDocs, saveEditorDocs, loadEditorFolders, saveEditorFolders } from './components/EditorFileList';
 import { type DrawDoc, loadDrawDocs, saveDrawDocs, loadDrawFolders, saveDrawFolders } from './components/DrawFileList';
 import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
@@ -15,6 +22,7 @@ import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
 import type { WebBookmark } from './services/bookmarkService';
 import { toggleBookmarkRead, addBookmark, fetchBookmarks, updateBookmarkFolder } from './services/bookmarkService';
+import { getTranslationConfig } from './services/translationService';
 import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useCommands, type Command } from './hooks/useCommands';
@@ -23,6 +31,7 @@ import { TitleBar } from './components/TitleBar';
 import { useResizablePanels } from './hooks/useResizablePanels';
 import { useFeedStore, type FeedStoreCallbacks } from './hooks/useFeedStore';
 import { useHighlightStore } from './hooks/useHighlightStore';
+import { useSnippetExpander } from './hooks/useSnippetExpander';
 import { useAuth } from './contexts/AuthContext';
 import { usePro } from './contexts/ProContext';
 import { SyncService, SYNC_ERROR_EVENT } from './services/syncService';
@@ -30,6 +39,7 @@ import { getProviderConfig, ProviderSyncService } from './services/providerSync'
 import type { NewFeedData } from './components/AddFeedModal';
 import type { FeedItem, FeedSource } from './types';
 import { UpgradeModal } from './components/UpgradeModal';
+import { requestNotificationPermission } from './services/notificationService';
 
 const sourceLabels: Record<FeedSource, string> = {
   article: 'Articles',
@@ -62,6 +72,7 @@ export default function App() {
   const syncCallbacks = useMemo<FeedStoreCallbacks>(() => ({
     onFeedAdded: (feed) => { SyncService.pushFeed(feed).catch(e => console.error('[sync] pushFeed', e)); },
     onFeedRemoved: (feedId) => { SyncService.deleteFeed(feedId).catch(e => console.error('[sync] deleteFeed', e)); },
+    onFeedUpdated: (feed) => { SyncService.pushFeed(feed).catch(e => console.error('[sync] pushFeed (update)', e)); },
     onItemsChanged: (items) => {
       items.forEach(item => SyncService.queueItemUpdate(item));
       // Push status changes to provider (if connected)
@@ -82,6 +93,28 @@ export default function App() {
   const store = useFeedStore(syncCallbacks);
   const highlightStore = useHighlightStore();
 
+  // Cleanup old read items on startup (retention policy)
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('superflux_retention_days');
+      const retentionDays = v ? Number(v) : 0;
+      if (retentionDays > 0) {
+        const removedIds = store.cleanupOldItems(retentionDays);
+        if (removedIds.length > 0) {
+          console.log(`[cleanup] Removed ${removedIds.length} old read items (retention: ${retentionDays}d)`);
+          if (user) {
+            SyncService.deleteItems(removedIds).catch(err =>
+              console.error('[cleanup] deleteItems from Supabase failed', err)
+            );
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[cleanup] retention cleanup failed', e);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Surface sync errors as a visible toast
   const [syncError, setSyncError] = useState<string | null>(null);
   useEffect(() => {
@@ -94,6 +127,15 @@ export default function App() {
     return () => window.removeEventListener(SYNC_ERROR_EVENT, handler);
   }, []);
 
+  // Request notification permission on startup (for feeds with notifyOnNew)
+  useEffect(() => {
+    // Check if any feed has notifications enabled
+    const hasNotifyFeeds = store.feeds.some(f => f.notifyOnNew);
+    if (hasNotifyFeeds) {
+      requestNotificationPermission();
+    }
+  }, [store.feeds]);
+
   const [selectedFeedId, setSelectedFeedId] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<FeedSource | null>(null);
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
@@ -102,8 +144,10 @@ export default function App() {
   const [readerPanelOpen, setReaderPanelOpen] = useState(true);
   const [showFavorites, setShowFavorites] = useState(false);
   const [showReadLater, setShowReadLater] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor' | 'draw'>('flux');
+  const [translateActive, setTranslateActive] = useState(() => getTranslationConfig().autoTranslate);
+const [isCollapsed, setIsCollapsed] = useState(false);
+  const [collapseTransition, setCollapseTransition] = useState<'collapsing' | 'expanding' | null>(null);
+  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard'>('flux');
   const [searchQuery, setSearchQuery] = useState('');
   const [brandTransition, setBrandTransition] = useState(false);
   const [syncInterval, setSyncInterval] = useState(getSyncInterval);
@@ -162,6 +206,93 @@ export default function App() {
   useEffect(() => { saveDrawDocs(drawDocs); }, [drawDocs]);
   useEffect(() => { saveDrawFolders(drawFolders); }, [drawFolders]);
 
+  // ── Snippets state (SuperExpander mode) ──
+  const [snippets, setSnippets] = useState<Snippet[]>(loadSnippets);
+  const [selectedSnippetId, setSelectedSnippetId] = useState<string | null>(null);
+
+  useEffect(() => { saveSnippets(snippets); }, [snippets]);
+
+  // Sync snippets to Rust backend for global keyboard hook expansion
+  useEffect(() => {
+    const data = snippets.map(s => ({ keyword: s.keyword, content: s.content, shortcut: s.shortcut ?? null }));
+    invoke('sync_snippets', { snippets: data }).catch(() => {});
+  }, [snippets]);
+
+  // Global snippet expansion — monitors keystrokes and expands /keywords
+  useSnippetExpander(snippets);
+
+  const selectedSnippet = useMemo(() =>
+    snippets.find(s => s.id === selectedSnippetId) ?? null,
+  [snippets, selectedSnippetId]);
+
+  // ── Clipboard history state (SuperClipboard mode) ──
+  const [clipEntries, setClipEntries] = useState<ClipEntry[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+
+  // Load initial clipboard history from backend
+  useEffect(() => {
+    invoke<ClipEntry[]>('get_clipboard_history').then(setClipEntries).catch(() => {});
+  }, []);
+
+  // Listen for new clipboard entries from backend
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen<ClipEntry>('clipboard-changed', (event) => {
+        setClipEntries(prev => {
+          const filtered = prev.filter(e => e.id !== event.payload.id);
+          return [event.payload, ...filtered];
+        });
+      }).then(fn => { unlisten = fn; });
+    });
+    return () => { unlisten?.(); };
+  }, []);
+
+  const selectedClipEntry = useMemo(() =>
+    clipEntries.find(e => e.id === selectedClipId) ?? null,
+  [clipEntries, selectedClipId]);
+
+  const handlePasteClip = useCallback((id: string) => {
+    const pasteToApp = getClipClickAction() === 'paste';
+    invoke('paste_clip_entry', { id, pasteToApp }).catch(console.error);
+  }, []);
+
+  const handleDeleteClip = useCallback((id: string) => {
+    invoke('delete_clip_entry', { id }).then((ok) => {
+      if (ok) setClipEntries(prev => prev.filter(e => e.id !== id));
+      if (selectedClipId === id) setSelectedClipId(null);
+    }).catch(console.error);
+  }, [selectedClipId]);
+
+  const handleTogglePinClip = useCallback((id: string) => {
+    invoke<boolean | null>('toggle_pin_clip_entry', { id }).then((pinned) => {
+      if (pinned !== null) {
+        setClipEntries(prev => prev.map(e => e.id === id ? { ...e, pinned } : e));
+      }
+    }).catch(console.error);
+  }, []);
+
+  const handleClearClipboard = useCallback(() => {
+    invoke<number>('clear_clipboard_history').then(() => {
+      setClipEntries(prev => prev.filter(e => e.pinned));
+      setSelectedClipId(null);
+    }).catch(console.error);
+  }, []);
+
+  const handleSetClipShortcut = useCallback(async (id: string, shortcut: string) => {
+    const result = await invoke<string | null>('set_clip_shortcut', { id, shortcut });
+    setClipEntries(prev => prev.map(e =>
+      e.id === id ? { ...e, shortcut: result ?? undefined } : e
+    ));
+  }, []);
+
+  const handleRemoveClipShortcut = useCallback(async (id: string) => {
+    await invoke<string | null>('set_clip_shortcut', { id, shortcut: null });
+    setClipEntries(prev => prev.map(e =>
+      e.id === id ? { ...e, shortcut: undefined } : e
+    ));
+  }, []);
+
   const selectedDoc = useMemo(() =>
     editorDocs.find(d => d.id === selectedDocId) ?? null,
   [editorDocs, selectedDocId]);
@@ -180,11 +311,15 @@ export default function App() {
   const [bookmarkList, setBookmarkList] = useState<WebBookmark[]>([]);
 
   // ── Bookmark folders (localStorage only, like notes) ──
+  const IMPORTANT_FOLDER = 'Importants';
   const [bookmarkFolders, setBookmarkFolders] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('superflux_bookmark_folders');
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
+      const parsed: string[] = raw ? JSON.parse(raw) : [];
+      // Ensure "Importants" folder always exists
+      if (!parsed.includes(IMPORTANT_FOLDER)) return [IMPORTANT_FOLDER, ...parsed];
+      return parsed;
+    } catch { return [IMPORTANT_FOLDER]; }
   });
   const [bookmarkFolderMap, setBookmarkFolderMap] = useState<Record<string, string>>(() => {
     try {
@@ -263,6 +398,7 @@ export default function App() {
   }, []);
 
   const handleRenameBookmarkFolder = useCallback((oldName: string, newName: string) => {
+    if (oldName === IMPORTANT_FOLDER) return; // Cannot rename Importants
     setBookmarkFolders(prev => prev.map(f => f === oldName ? newName : f));
     setBookmarkFolderMap(prev => {
       const next = { ...prev };
@@ -283,6 +419,7 @@ export default function App() {
   }, [selectedBookmarkFolder, user]);
 
   const handleDeleteBookmarkFolder = useCallback((name: string) => {
+    if (name === IMPORTANT_FOLDER) return; // Cannot delete Importants
     setBookmarkFolders(prev => prev.filter(f => f !== name));
     setBookmarkFolderMap(prev => {
       const next = { ...prev };
@@ -473,6 +610,57 @@ export default function App() {
     if (user) updateDrawDocMeta(user.id, docId, { folder: folder ?? null });
   }, [user]);
 
+  // ── Snippet handlers (SuperExpander) ──
+  const handleAddSnippet = useCallback((data?: { name: string; keyword: string; content: string }) => {
+    const now = new Date().toISOString();
+    const newSnippet: Snippet = {
+      id: crypto.randomUUID(),
+      name: data?.name ?? '',
+      keyword: data?.keyword ?? '',
+      content: data?.content ?? '',
+      createdAt: now,
+      updatedAt: now,
+    };
+    setSnippets(prev => [newSnippet, ...prev]);
+    setSelectedSnippetId(newSnippet.id);
+  }, []);
+
+  const handleDeleteSnippet = useCallback((id: string) => {
+    setSnippets(prev => prev.filter(s => s.id !== id));
+    setSelectedSnippetId(prev => prev === id ? null : prev);
+  }, []);
+
+  const handleUpdateSnippet = useCallback((id: string, updates: Partial<Pick<Snippet, 'name' | 'keyword' | 'content'>>) => {
+    setSnippets(prev => prev.map(s =>
+      s.id === id ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s
+    ));
+  }, []);
+
+  const handleCopySnippet = useCallback(async (id: string) => {
+    const snippet = snippets.find(s => s.id === id);
+    if (!snippet) return;
+    const resolved = await resolveSnippet(snippet.content);
+    await navigator.clipboard.writeText(resolved);
+  }, [snippets]);
+
+  const handleSetSnippetShortcut = useCallback(async (id: string, shortcut: string) => {
+    const snippet = snippets.find(s => s.id === id);
+    if (!snippet) return;
+    await invoke<string | null>('set_snippet_shortcut', { keyword: snippet.keyword, shortcut, content: snippet.content });
+    setSnippets(prev => prev.map(s =>
+      s.id === id ? { ...s, shortcut, updatedAt: new Date().toISOString() } : s
+    ));
+  }, [snippets]);
+
+  const handleRemoveSnippetShortcut = useCallback(async (id: string) => {
+    const snippet = snippets.find(s => s.id === id);
+    if (!snippet) return;
+    await invoke<string | null>('set_snippet_shortcut', { keyword: snippet.keyword, shortcut: null, content: snippet.content });
+    setSnippets(prev => prev.map(s =>
+      s.id === id ? { ...s, shortcut: undefined, updatedAt: new Date().toISOString() } : s
+    ));
+  }, [snippets]);
+
   const selectedNote = useMemo(() =>
     notes.find(n => n.id === selectedNoteId) ?? null,
   [notes, selectedNoteId]);
@@ -510,6 +698,27 @@ export default function App() {
       });
     }
   }, [selectedNoteFolder, user]);
+
+  const handleCreateNoteFromSelection = useCallback((text: string, articleTitle: string) => {
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      title: articleTitle,
+      content: text,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setNotes(prev => [newNote, ...prev]);
+    setSelectedNoteId(newNote.id);
+    setBrandMode('note');
+    if (user) {
+      upsertNote(user.id, {
+        id: newNote.id,
+        title: newNote.title,
+        content: newNote.content,
+        folder: null,
+      });
+    }
+  }, [user]);
 
   const handleDeleteNote = useCallback((noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
@@ -606,8 +815,14 @@ export default function App() {
     }
   }, [brandMode, user]);
 
-  const handleToggleCollapse = useCallback(() => {
-    setIsCollapsed(prev => !prev);
+const handleToggleCollapse = useCallback(() => {
+    setIsCollapsed(prev => {
+      // Déclencher l'animation de transition
+      setCollapseTransition(prev ? 'expanding' : 'collapsing');
+      // Retirer la classe de transition après l'animation
+      setTimeout(() => setCollapseTransition(null), 400);
+      return !prev;
+    });
   }, []);
 
   const { widths, setWidths, handleMouseDown, containerRef } = useResizablePanels({
@@ -626,6 +841,15 @@ export default function App() {
       setFeedPanelOpen(false);
       setWidths([18, 0, 82]);
     } else if (brandMode === 'draw') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else if (brandMode === 'translate') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else if (brandMode === 'expander') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else if (brandMode === 'clipboard') {
       setFeedPanelOpen(false);
       setWidths([18, 0, 82]);
     } else {
@@ -739,14 +963,17 @@ export default function App() {
     prevUserRef.current = userId;
   }, [user]);
 
-  // Periodic fullSync at configured interval while logged in
+  // Periodic feed refresh + Supabase sync at configured interval
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
+      // 1. Fetch new RSS items (triggers notifications via syncAll)
+      store.syncAll().catch(err => console.error('[sync] periodic feed refresh failed', err));
+      // 2. Sync data to/from Supabase
       SyncService.fullSync().catch(err => console.error('[sync] periodic fullSync failed', err));
     }, syncInterval);
     return () => clearInterval(interval);
-  }, [user, syncInterval]);
+  }, [user, syncInterval, store]);
 
   // Provider sync: initial sync + periodic interval
   useEffect(() => {
@@ -849,6 +1076,12 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, highlightStore.data]);
 
+  const selectedBookmarkHighlights = useMemo(() => {
+    if (!selectedBookmark) return [];
+    return highlightStore.getHighlights(selectedBookmark.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBookmark, highlightStore.data]);
+
   const sourceName = selectedSource ? sourceLabels[selectedSource] : null;
 
   const handleSelectFeed = useCallback((feedId: string, source: FeedSource) => {
@@ -938,9 +1171,9 @@ export default function App() {
     setTimeout(() => {
       setBrandMode(m => {
         if (isPro) {
-          return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : 'flux';
+          return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'editor' : m === 'editor' ? 'draw' : m === 'draw' ? 'translate' : m === 'translate' ? 'expander' : m === 'expander' ? 'clipboard' : 'flux';
         }
-        return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : 'flux';
+        return m === 'flux' ? 'bookmark' : m === 'bookmark' ? 'note' : m === 'note' ? 'translate' : m === 'translate' ? 'expander' : m === 'expander' ? 'clipboard' : 'flux';
       });
       setSelectedNoteId(null);
       setSelectedBookmark(null);
@@ -1019,6 +1252,9 @@ export default function App() {
       { id: 'mode.note', label: 'Mode SuperNote', category: 'Modes', shortcut: 'Ctrl+3', action: () => handleBrandSwitch('note') },
       { id: 'mode.editor', label: isPro ? 'Mode SuperEditor' : 'Mode SuperEditor (Pro)', category: 'Modes', shortcut: 'Ctrl+4', action: () => handleBrandSwitch('editor') },
       { id: 'mode.draw', label: isPro ? 'Mode SuperDraw' : 'Mode SuperDraw (Pro)', category: 'Modes', shortcut: 'Ctrl+5', action: () => handleBrandSwitch('draw') },
+      { id: 'mode.translate', label: 'Mode SuperTranslate', category: 'Modes', shortcut: 'Ctrl+6', action: () => handleBrandSwitch('translate') },
+      { id: 'mode.expander', label: 'Mode SuperExpander', category: 'Modes', shortcut: 'Ctrl+7', action: () => handleBrandSwitch('expander') },
+      { id: 'mode.clipboard', label: 'Mode SuperClipboard', category: 'Modes', shortcut: 'Ctrl+8', action: () => handleBrandSwitch('clipboard') },
 
       // ── Feeds ──
       { id: 'feed.sync', label: 'Synchroniser tous les feeds', category: 'Feeds', shortcut: 'Ctrl+Shift+s', action: () => handleSyncAll() },
@@ -1035,7 +1271,7 @@ export default function App() {
   }, [selectedFeedId, store, handleSelectItem, handleSyncAll, registerCommands]);
 
   // Brand switch helper (direct mode, with same animation as toggle)
-  const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => {
+  const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard') => {
     if (!isPro && (mode === 'editor' || mode === 'draw')) {
       showUpgradeModal();
       return;
@@ -1052,11 +1288,11 @@ export default function App() {
   // When some panels are closed, remaining open panels share the space via flex
   const allOpen = sourcePanelOpen && feedPanelOpen && readerPanelOpen;
 
-  return (
-    <div className={`app-wrapper ${isCollapsed ? 'app-wrapper--collapsed' : ''}`}>
+return (
+    <div className={`app-wrapper ${isCollapsed ? 'app-wrapper--collapsed' : ''} ${collapseTransition ? `app-wrapper--${collapseTransition}` : ''}`}>
       <CommandPalette commands={commands} isOpen={paletteOpen} onClose={closePalette} />
       <ShortcutsOverlay commands={commands} isOpen={helpOpen} onClose={closeHelp} />
-      <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} pinnedItems={pinnedItems} categories={store.categories} onSelectFeed={handleSelectFeed} onSync={handleSyncAll} isSyncing={store.isSyncing} showSysInfo={showSysInfo} />
+      <TitleBar isCollapsed={isCollapsed} onToggleCollapse={handleToggleCollapse} unreadCount={totalUnreadCount} favoritesCount={favoritesCount} readLaterCount={readLaterCount} pinnedItems={pinnedItems} categories={store.categories} onSelectFeed={handleSelectFeed} onSync={handleSyncAll} isSyncing={store.isSyncing} showSysInfo={showSysInfo} brandMode={brandMode} onBrandSwitch={handleBrandSwitch} isPro={isPro} />
       {!isCollapsed && (
         <>
         <div className="app" ref={containerRef}>
@@ -1072,7 +1308,7 @@ export default function App() {
 
           {sourcePanelOpen ? (
             <>
-              <div className="panel panel-source" style={(allOpen || ((brandMode === 'editor' || brandMode === 'draw') && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
+              <div className="panel panel-source" style={(allOpen || ((brandMode === 'editor' || brandMode === 'draw' || brandMode === 'translate' || brandMode === 'expander' || brandMode === 'clipboard') && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
                 <SourcePanel
                   categories={store.categories}
                   selectedFeedId={selectedFeedId}
@@ -1100,6 +1336,7 @@ export default function App() {
                   onDeleteFolder={store.deleteFolder}
                   onMoveFeedToFolder={store.moveFeedToFolder}
                   onReorderFeed={store.reorderFeed}
+                  onToggleNotify={store.toggleNotify}
                   onClose={handleCloseSourcePanel}
                   brandMode={brandMode}
                   onToggleBrand={handleToggleBrand}
@@ -1161,6 +1398,18 @@ export default function App() {
                   selectedBookmarkId={selectedBookmark?.id ?? null}
                   onSelectBookmark={handleSelectBookmark}
                   bookmarkTotalCount={bookmarkList.length}
+                  snippets={snippets}
+                  selectedSnippetId={selectedSnippetId}
+                  onSelectSnippet={setSelectedSnippetId}
+                  onAddSnippet={handleAddSnippet}
+                  onDeleteSnippet={handleDeleteSnippet}
+                  onCopySnippet={handleCopySnippet}
+                  clipEntries={clipEntries}
+                  selectedClipId={selectedClipId}
+                  onSelectClip={setSelectedClipId}
+                  onPasteClip={handlePasteClip}
+                  onDeleteClip={handleDeleteClip}
+                  onTogglePinClip={handleTogglePinClip}
                 />
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(0, e)} />}
@@ -1191,8 +1440,10 @@ export default function App() {
                     bookmarkFolders={bookmarkFolders}
                     onSelectBookmark={handleSelectBookmark}
                     onMoveBookmarkToFolder={handleMoveBookmarkToFolder}
+                    translateActive={translateActive}
+                    onTranslateActiveChange={setTranslateActive}
                   />
-                ) : brandMode === 'editor' || brandMode === 'draw' ? (
+                ) : brandMode === 'editor' || brandMode === 'draw' || brandMode === 'translate' || brandMode === 'expander' || brandMode === 'clipboard' ? (
                   <div className="panel-empty-note" />
                 ) : (
                   <FeedPanel
@@ -1212,12 +1463,14 @@ export default function App() {
                     onReorderItems={(showFavorites || showReadLater) ? handleReorderItems : undefined}
                     onSaveAsBookmark={user ? handleSaveItemAsBookmark : undefined}
                     onClose={handleCloseFeedPanel}
+                    translateActive={translateActive}
+                    onTranslateActiveChange={setTranslateActive}
                   />
                 )}
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(1, e)} />}
             </>
-          ) : (brandMode !== 'editor' && brandMode !== 'draw') ? (
+          ) : (brandMode !== 'editor' && brandMode !== 'draw' && brandMode !== 'translate' && brandMode !== 'expander' && brandMode !== 'clipboard') ? (
             <div className="panel-strip" onClick={() => setFeedPanelOpen(true)} title="Ouvrir le panneau Feed (2)">
               <span className="panel-strip-icon">☰</span>
             </div>
@@ -1235,10 +1488,47 @@ export default function App() {
                 <SuperEditor doc={selectedDoc} onUpdateContent={handleUpdateDocContent} onAddDoc={handleAddDoc} />
               ) : brandMode === 'draw' ? (
                 <SuperDraw doc={selectedDraw} onUpdateContent={handleUpdateDrawContent} onAddDoc={handleAddDraw} />
+              ) : brandMode === 'translate' ? (
+                <SuperTranslate />
+              ) : brandMode === 'expander' ? (
+                <SuperExpander
+                  snippets={snippets}
+                  snippet={selectedSnippet}
+                  onUpdateSnippet={handleUpdateSnippet}
+                  onCopySnippet={handleCopySnippet}
+                  onAddSnippet={handleAddSnippet}
+                  onDeleteSnippet={handleDeleteSnippet}
+                  onSelectSnippet={setSelectedSnippetId}
+                  onSetShortcut={handleSetSnippetShortcut}
+                  onRemoveShortcut={handleRemoveSnippetShortcut}
+                  searchQuery={searchQuery}
+                />
+              ) : brandMode === 'clipboard' ? (
+                <SuperClipboard
+                  entries={clipEntries}
+                  entry={selectedClipEntry}
+                  onSelectEntry={setSelectedClipId}
+                  onPasteEntry={handlePasteClip}
+                  onDeleteEntry={handleDeleteClip}
+                  onTogglePin={handleTogglePinClip}
+                  onClearAll={handleClearClipboard}
+                  onSetShortcut={handleSetClipShortcut}
+                  onRemoveShortcut={handleRemoveClipShortcut}
+                  searchQuery={searchQuery}
+                />
               ) : brandMode === 'bookmark' ? (
                 <BookmarkReader
                   bookmark={selectedBookmark}
                   onMarkRead={handleBookmarkMarkRead}
+                  translateActive={translateActive}
+                  highlights={selectedBookmarkHighlights}
+                  onHighlightAdd={(bookmarkId, text, color, prefix, suffix) =>
+                    highlightStore.addHighlight(bookmarkId, text, color, prefix, suffix)}
+                  onHighlightRemove={(bookmarkId, highlightId) =>
+                    highlightStore.removeHighlight(bookmarkId, highlightId)}
+                  onHighlightNoteUpdate={(bookmarkId, highlightId, note) =>
+                    highlightStore.updateHighlightNote(bookmarkId, highlightId, note)}
+                  onCreateNoteFromSelection={handleCreateNoteFromSelection}
                 />
               ) : (
                 <ReaderPanel
@@ -1262,8 +1552,10 @@ export default function App() {
                     highlightStore.removeHighlight(itemId, highlightId)}
                   onHighlightNoteUpdate={(itemId, highlightId, note) =>
                     highlightStore.updateHighlightNote(itemId, highlightId, note)}
+                  onCreateNoteFromSelection={handleCreateNoteFromSelection}
                   onBackToFeeds={handleBreadcrumbAll}
                   onClose={handleCloseReaderPanel}
+                  translateActive={translateActive}
                 />
               )}
             </div>

@@ -1,4 +1,4 @@
-# Guide d'Intégration Rapide - Composants de Synchronisation
+  # Guide d'Intégration Rapide - Composants de Synchronisation
 
 ## 🚀 Démarrage Rapide (5 minutes)
 

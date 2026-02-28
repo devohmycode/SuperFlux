@@ -16,6 +16,8 @@ import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
 import { BookmarkSourceList } from "./BookmarkSourceList";
 import { DrawFileList } from "./DrawFileList";
+import { ExpanderFileList } from "./ExpanderFileList";
+import { ClipboardSettingsPanel } from "./ClipboardSettingsPanel";
 import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
@@ -48,10 +50,11 @@ interface SourcePanelProps {
   onRenameFolder: (categoryId: string, oldPath: string, newName: string) => void;
   onDeleteFolder: (categoryId: string, path: string) => void;
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
+  onToggleNotify?: (feedId: string) => void;
   onClose?: () => void;
-  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw';
+  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard';
   onToggleBrand: () => void;
-  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => void;
+  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard') => void;
   onSyncIntervalChange?: (interval: number) => void;
   onShowSysInfoChange?: (show: boolean) => void;
   showSysInfo?: boolean;
@@ -114,6 +117,20 @@ interface SourcePanelProps {
   onRenameDrawFolder?: (oldName: string, newName: string) => void;
   onDeleteDrawFolder?: (name: string) => void;
   onMoveDrawToFolder?: (docId: string, folder: string | undefined) => void;
+  // Expander mode props
+  snippets?: import('./ExpanderFileList').Snippet[];
+  selectedSnippetId?: string | null;
+  onSelectSnippet?: (id: string) => void;
+  onAddSnippet?: () => void;
+  onDeleteSnippet?: (id: string) => void;
+  onCopySnippet?: (id: string) => void;
+  // Clipboard mode props
+  clipEntries?: import('./ClipboardHistoryList').ClipEntry[];
+  selectedClipId?: string | null;
+  onSelectClip?: (id: string) => void;
+  onPasteClip?: (id: string) => void;
+  onDeleteClip?: (id: string) => void;
+  onTogglePinClip?: (id: string) => void;
 }
 
 const sourceIcons: Record<string, string> = {
@@ -253,6 +270,7 @@ export function SourcePanel({
   onMoveDocToFolder,
   onAddBookmark,
   onReorderFeed,
+  onToggleNotify,
   bookmarkFolders,
   bookmarkFolderCounts,
   selectedBookmarkFolder,
@@ -278,6 +296,18 @@ export function SourcePanel({
   onRenameDrawFolder,
   onDeleteDrawFolder,
   onMoveDrawToFolder,
+  snippets = [],
+  selectedSnippetId = null,
+  onSelectSnippet,
+  onAddSnippet,
+  onDeleteSnippet,
+  onCopySnippet,
+  clipEntries = [],
+  selectedClipId,
+  onSelectClip,
+  onPasteClip,
+  onDeleteClip,
+  onTogglePinClip,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -544,6 +574,9 @@ export function SourcePanel({
         {feed.unreadCount > 0 && (
           <span className="feed-unread">{feed.unreadCount}</span>
         )}
+        {feed.notifyOnNew && (
+          <span className="feed-notify-badge" title="Notifications activées">🔔</span>
+        )}
         {isRSSHubUrl(feed.url) && (
           <span className="feed-rsshub-badge" title="Via RSSHub">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
@@ -676,7 +709,7 @@ export function SourcePanel({
           <span className="brand-icon">◈</span>
           <button className="brand-name-btn" onClick={onToggleBrand}>
             <ShinyText
-              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : 'SuperBookmark'}
+              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : brandMode === 'translate' ? 'SuperTranslate' : brandMode === 'expander' ? 'SuperExpander' : brandMode === 'clipboard' ? 'SuperClipboard' : 'SuperBookmark'}
               speed={2}
               delay={0}
               color="#787878"
@@ -747,6 +780,19 @@ export function SourcePanel({
             onSelectBookmark={onSelectBookmark}
             totalCount={bookmarkTotalCount}
           />
+        ) : brandMode === 'translate' ? (
+          <div className="panel-empty-note" style={{ padding: '24px', opacity: 0.5, textAlign: 'center' }}>🌐 SuperTranslate</div>
+        ) : brandMode === 'expander' ? (
+          <ExpanderFileList
+            snippets={snippets}
+            selectedSnippetId={selectedSnippetId}
+            searchQuery={searchQuery}
+            onSelectSnippet={onSelectSnippet ?? (() => {})}
+            onDeleteSnippet={onDeleteSnippet ?? (() => {})}
+            onCopySnippet={onCopySnippet ?? (() => {})}
+          />
+        ) : brandMode === 'clipboard' ? (
+          <ClipboardSettingsPanel />
         ) : brandMode === 'draw' ? (
           <DrawFileList
             docs={drawDocs}
@@ -889,6 +935,9 @@ export function SourcePanel({
             { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'orange' },
             { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
             { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'indigo' },
+            { mode: 'translate' as const, icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'blue' },
+            { mode: 'expander' as const, icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
+            { mode: 'clipboard' as const, icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
           ]).map(tab => {
             const locked = tab.pro && !isPro;
             return (
@@ -972,6 +1021,8 @@ export function SourcePanel({
             brandMode === 'flux' ? 'Ajouter un flux' :
             brandMode === 'note' ? 'Nouvelle note' :
             brandMode === 'editor' ? 'Nouveau document' :
+            brandMode === 'expander' ? 'Nouveau snippet' :
+            brandMode === 'clipboard' ? 'Clipboard' :
             'Ajouter un bookmark'
           }
           onClick={() => {
@@ -985,6 +1036,8 @@ export function SourcePanel({
               onAddNote?.();
             } else if (brandMode === 'editor') {
               onAddDoc?.();
+            } else if (brandMode === 'expander') {
+              onAddSnippet?.();
             } else if (brandMode === 'bookmark') {
               setBookmarkUrlOpen(prev => !prev);
               setTimeout(() => bookmarkUrlRef.current?.focus(), 50);
@@ -1268,6 +1321,16 @@ export function SourcePanel({
             >
               <span className="feed-context-menu-icon">✎</span>
               Renommer
+            </button>
+            <button
+              className="feed-context-menu-item"
+              onClick={() => {
+                onToggleNotify?.(contextMenu.feed.id);
+                setContextMenu(null);
+              }}
+            >
+              <span className="feed-context-menu-icon">{contextMenu.feed.notifyOnNew ? '🔔' : '🔕'}</span>
+              {contextMenu.feed.notifyOnNew ? 'Désactiver notifications' : 'Activer notifications'}
             </button>
             <button
               className="feed-context-menu-item feed-context-menu-item--danger"

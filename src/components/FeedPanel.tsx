@@ -49,6 +49,8 @@ interface FeedPanelProps {
   onReorderItems?: (orderedIds: string[]) => void;
   onSaveAsBookmark?: (item: FeedItem) => void;
   onClose: () => void;
+  translateActive?: boolean;
+  onTranslateActiveChange?: (active: boolean) => void;
 }
 
 function formatTimeAgo(date: Date): string {
@@ -117,7 +119,7 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
   return null;
 }
 
-export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onSaveAsBookmark, onClose }: FeedPanelProps) {
+export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onSaveAsBookmark, onClose, translateActive: translateActiveProp, onTranslateActiveChange }: FeedPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
@@ -183,8 +185,9 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
   const [digestError, setDigestError] = useState('');
   const [digestOpen, setDigestOpen] = useState(true);
 
-  // ── Translation ──
-  const [translateActive, setTranslateActive] = useState(() => getTranslationConfig().autoTranslate);
+  // ── Translation (controlled by parent) ──
+  const translateActive = translateActiveProp ?? false;
+  const setTranslateActive = useCallback((v: boolean) => { onTranslateActiveChange?.(v); }, [onTranslateActiveChange]);
   const [translateLoading, setTranslateLoading] = useState(false);
   const [translatedItems, setTranslatedItems] = useState<Record<string, { title: string; excerpt: string }>>({});
 

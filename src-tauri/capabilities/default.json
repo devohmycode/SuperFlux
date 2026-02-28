@@ -21,6 +21,8 @@
     "core:window:allow-set-position",
     "core:window:allow-set-focus",
     "core:window:allow-set-always-on-top",
-    "core:window:allow-set-effects"
+    "core:window:allow-set-effects",
+    "global-shortcut:default",
+    "notification:default"
   ]
 }
