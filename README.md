@@ -209,7 +209,9 @@ SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks
 
 ## Additional applications
 
-[Plugins Chrome & Firefox](https://github.com/devohmycode/SuperFlux-Plugin)
+[Plugins Chrome & Firefox](https://github.com/devohmycode/SuperFlux-Plugin) :
+
+[Firefox](https://addons.mozilla.org/fr/android/addon/superflux/)
 
 [Android APK](https://github.com/devohmycode/SuperFluxDroid)
 
