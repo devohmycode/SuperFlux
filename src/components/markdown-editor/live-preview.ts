@@ -5,7 +5,9 @@ import { RangeSet } from '@codemirror/state';
 import type { Range } from '@codemirror/state';
 
 class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string) { super(); }
+  src: string;
+  alt: string;
+  constructor(src: string, alt: string) { super(); this.src = src; this.alt = alt; }
   toDOM(): HTMLElement {
     const wrapper = document.createElement('span');
     wrapper.className = 'cm-lp-image-wrapper';

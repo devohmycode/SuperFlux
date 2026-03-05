@@ -56,7 +56,7 @@ export function MarkdownFileTree({ entries, selectedPath, gitFiles, onSelectFile
   );
 }
 
-function FileTreeItem({ entry, selectedPath, gitFiles, onSelectFile, onDelete, onRename, depth }: Props & { entry: MdFileEntry; depth: number }) {
+function FileTreeItem({ entry, selectedPath, gitFiles, onSelectFile, onDelete, onRename, depth }: Omit<Props, 'entries'> & { entry: MdFileEntry; depth: number }) {
   const [expanded, setExpanded] = useState(depth < 1);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 

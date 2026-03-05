@@ -391,12 +391,12 @@ export function SourcePanel({
   onAddSnippet,
   onDeleteSnippet,
   onCopySnippet,
-  clipEntries = [],
-  selectedClipId,
-  onSelectClip,
-  onPasteClip,
-  onDeleteClip,
-  onTogglePinClip,
+  clipEntries: _clipEntries = [],
+  selectedClipId: _selectedClipId,
+  onSelectClip: _onSelectClip,
+  onPasteClip: _onPasteClip,
+  onDeleteClip: _onDeleteClip,
+  onTogglePinClip: _onTogglePinClip,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);

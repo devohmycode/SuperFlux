@@ -14,7 +14,7 @@ interface Props {
   searchQuery?: string;
 }
 
-export function SuperMarkdown({ searchQuery }: Props) {
+export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
   // Vault state
   const [vaultPath, setVaultPath] = useState<string | null>(() => localStorage.getItem(VAULT_PATH_KEY));
   const [fileTree, setFileTree] = useState<MdFileEntry[]>([]);
