@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Search, Replace, CaseSensitive, X } from 'lucide-react';
+import { Search, Replace, CaseSensitive } from 'lucide-react';
 import type { MdSearchMatch } from './markdownTypes';
 
 interface Props {
@@ -17,7 +17,7 @@ export function MarkdownSearchPanel({ vaultPath, onNavigate }: Props) {
   const [searching, setSearching] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   useEffect(() => {
     inputRef.current?.focus();

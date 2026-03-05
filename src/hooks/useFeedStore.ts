@@ -128,7 +128,7 @@ export interface FeedStore {
   addFeed: (url: string, name: string, source: FeedSource) => Promise<Feed>;
   removeFeed: (feedId: string) => void;
   renameFeed: (feedId: string, newName: string) => void;
-  syncFeed: (feedId: string) => Promise<void>;
+  syncFeed: (feedId: string) => Promise<{ feed: Feed; newItems: FeedItem[] } | null>;
   syncAll: () => Promise<void>;
   markAsRead: (itemId: string) => void;
   markAllAsRead: (feedId?: string) => void;

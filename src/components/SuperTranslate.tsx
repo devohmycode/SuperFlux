@@ -10,7 +10,7 @@ export function SuperTranslate() {
   const [targetLang, setTargetLang] = useState('fr');
   const [detectedLang, setDetectedLang] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const abortRef = useRef(0);
 
   const doTranslate = useCallback(async (text: string, sl: string, tl: string) => {

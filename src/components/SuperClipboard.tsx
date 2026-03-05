@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import type { ClipEntry } from './ClipboardHistoryList';
-import { getClipClickAction } from './ClipboardSettingsPanel';
 
 interface SuperClipboardProps {
   entries: ClipEntry[];

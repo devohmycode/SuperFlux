@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EditorView, basicSetup } from 'codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
@@ -24,12 +24,12 @@ interface Props {
 }
 
 export function MarkdownCodeEditor({
-  content, filePath, vaultPath, viewMode,
+  content, filePath: _filePath, vaultPath, viewMode,
   onContentChange, onSave, onCursorChange, onNavigateWikilink,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
   const mdFileNamesRef = useRef<string[]>([]);
   const tagsRef = useRef<MdTagInfo[]>([]);
   const [previewContent, setPreviewContent] = useState(content);
@@ -111,19 +111,6 @@ export function MarkdownCodeEditor({
       setPreviewContent(content);
     }
   }, [content]);
-
-  const gotoLine = useCallback((line: number) => {
-    const view = viewRef.current;
-    if (!view) return;
-    const doc = view.state.doc;
-    const lineNum = Math.min(line, doc.lines);
-    const lineInfo = doc.line(lineNum);
-    view.dispatch({
-      selection: { anchor: lineInfo.from },
-      effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' }),
-    });
-    view.focus();
-  }, []);
 
   return (
     <div className={`md-editor-split ${viewMode === 'split' ? 'split-mode' : ''}`}>
