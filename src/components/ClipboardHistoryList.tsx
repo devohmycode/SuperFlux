@@ -17,6 +17,7 @@ interface ClipboardHistoryListProps {
   onDeleteEntry: (id: string) => void;
   onPasteEntry: (id: string) => void;
   onTogglePin: (id: string) => void;
+  onConvertToNote?: (content: string) => void;
 }
 
 type ContextMenuState = { x: number; y: number; entryId: string } | null;
@@ -39,6 +40,7 @@ export function ClipboardHistoryList({
   onDeleteEntry,
   onPasteEntry,
   onTogglePin,
+  onConvertToNote,
 }: ClipboardHistoryListProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -140,6 +142,18 @@ export function ClipboardHistoryList({
             >
               <span>📌</span> {entries.find(e => e.id === contextMenu.entryId)?.pinned ? 'Désépingler' : 'Épingler'}
             </button>
+            {onConvertToNote && (
+              <button
+                className="feed-context-menu-item"
+                onClick={() => {
+                  const entry = entries.find(e => e.id === contextMenu.entryId);
+                  if (entry) onConvertToNote(entry.content);
+                  setContextMenu(null);
+                }}
+              >
+                <span>📝</span> Convertir en note
+              </button>
+            )}
             <button
               className="feed-context-menu-item feed-context-menu-item--danger"
               onClick={() => {

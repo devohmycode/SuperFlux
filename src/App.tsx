@@ -10,6 +10,8 @@ import { SuperDraw } from './components/SuperDraw';
 import { SuperTranslate } from './components/SuperTranslate';
 import { SuperExpander, resolveSnippet } from './components/SuperExpander';
 import { SuperClipboard } from './components/SuperClipboard';
+import { SuperPassword } from './components/SuperPassword';
+import { SuperMarkdown } from './components/SuperMarkdown';
 import type { ClipEntry } from './components/ClipboardHistoryList';
 import { getClipClickAction } from './components/ClipboardSettingsPanel';
 import { type Snippet, loadSnippets, saveSnippets } from './components/ExpanderFileList';
@@ -18,6 +20,7 @@ import { type DrawDoc, loadDrawDocs, saveDrawDocs, loadDrawFolders, saveDrawFold
 import { fetchEditorDocs, upsertEditorDoc, removeEditorDoc, updateEditorDocContent, updateEditorDocMeta } from './services/editorDocService';
 import { fetchDrawDocs, upsertDrawDoc, removeDrawDoc, updateDrawDocContent, updateDrawDocMeta } from './services/drawDocService';
 import { fetchNotes, upsertNote, removeNote, updateNoteContent, updateNoteMeta } from './services/noteService';
+import { isPwSyncEnabled, downloadVault } from './services/passwordSyncService';
 import { BookmarkPanel } from './components/BookmarkPanel';
 import { BookmarkReader } from './components/BookmarkReader';
 import type { WebBookmark } from './services/bookmarkService';
@@ -147,7 +150,7 @@ export default function App() {
   const [translateActive, setTranslateActive] = useState(() => getTranslationConfig().autoTranslate);
 const [isCollapsed, setIsCollapsed] = useState(false);
   const [collapseTransition, setCollapseTransition] = useState<'collapsing' | 'expanding' | null>(null);
-  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard'>('flux');
+  const [brandMode, setBrandMode] = useState<'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown'>('flux');
   const [searchQuery, setSearchQuery] = useState('');
   const [brandTransition, setBrandTransition] = useState(false);
   const [syncInterval, setSyncInterval] = useState(getSyncInterval);
@@ -836,6 +839,7 @@ const handleToggleCollapse = useCallback(() => {
   // Adjust panel widths when switching brand modes
   useEffect(() => {
     if (brandMode === 'note') {
+      setFeedPanelOpen(true);
       setWidths([18, 57, 25]);
     } else if (brandMode === 'editor') {
       setFeedPanelOpen(false);
@@ -850,6 +854,9 @@ const handleToggleCollapse = useCallback(() => {
       setFeedPanelOpen(false);
       setWidths([18, 0, 82]);
     } else if (brandMode === 'clipboard') {
+      setFeedPanelOpen(false);
+      setWidths([18, 0, 82]);
+    } else if (brandMode === 'markdown') {
       setFeedPanelOpen(false);
       setWidths([18, 0, 82]);
     } else {
@@ -868,6 +875,21 @@ const handleToggleCollapse = useCallback(() => {
     // On login: run fullSync + fetch editor docs from Supabase
     if (userId && prevUserRef.current !== userId) {
       SyncService.fullSync().catch(err => console.error('[sync] fullSync failed', err));
+      // Download password vault from cloud if sync enabled
+      if (isPwSyncEnabled()) {
+        downloadVault(userId).then(async (remote) => {
+          if (remote) {
+            try {
+              await invoke('pw_import_vault_blob', { data: remote.blob });
+              const metaBytes = Array.from(new TextEncoder().encode(remote.meta));
+              await invoke('pw_import_vault_meta', { data: metaBytes });
+              console.log('[pw-sync] vault imported from cloud');
+            } catch (err) {
+              console.error('[pw-sync] vault import failed:', err);
+            }
+          }
+        }).catch(err => console.error('[pw-sync] download failed', err));
+      }
       fetchEditorDocs(userId).then(rows => {
         if (rows.length > 0) {
           const docs: EditorDoc[] = rows.map(r => ({
@@ -1255,6 +1277,8 @@ const handleToggleCollapse = useCallback(() => {
       { id: 'mode.translate', label: 'Mode SuperTranslate', category: 'Modes', shortcut: 'Ctrl+6', action: () => handleBrandSwitch('translate') },
       { id: 'mode.expander', label: 'Mode SuperExpander', category: 'Modes', shortcut: 'Ctrl+7', action: () => handleBrandSwitch('expander') },
       { id: 'mode.clipboard', label: 'Mode SuperClipboard', category: 'Modes', shortcut: 'Ctrl+8', action: () => handleBrandSwitch('clipboard') },
+      { id: 'mode.password', label: isPro ? 'Mode SuperPassword' : 'Mode SuperPassword (Pro)', category: 'Modes', shortcut: 'Ctrl+9', action: () => handleBrandSwitch('password') },
+      { id: 'mode.markdown', label: isPro ? 'Mode SuperMarkdown' : 'Mode SuperMarkdown (Pro)', category: 'Modes', shortcut: 'Ctrl+0', action: () => handleBrandSwitch('markdown') },
 
       // ── Feeds ──
       { id: 'feed.sync', label: 'Synchroniser tous les feeds', category: 'Feeds', shortcut: 'Ctrl+Shift+s', action: () => handleSyncAll() },
@@ -1271,8 +1295,8 @@ const handleToggleCollapse = useCallback(() => {
   }, [selectedFeedId, store, handleSelectItem, handleSyncAll, registerCommands]);
 
   // Brand switch helper (direct mode, with same animation as toggle)
-  const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard') => {
-    if (!isPro && (mode === 'editor' || mode === 'draw')) {
+  const handleBrandSwitch = useCallback((mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown') => {
+    if (!isPro && (mode === 'editor' || mode === 'draw' || mode === 'password' || mode === 'markdown')) {
       showUpgradeModal();
       return;
     }
@@ -1308,7 +1332,7 @@ return (
 
           {sourcePanelOpen ? (
             <>
-              <div className="panel panel-source" style={(allOpen || ((brandMode === 'editor' || brandMode === 'draw' || brandMode === 'translate' || brandMode === 'expander' || brandMode === 'clipboard') && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
+              <div className="panel panel-source" style={(allOpen || ((brandMode === 'editor' || brandMode === 'draw' || brandMode === 'translate' || brandMode === 'expander' || brandMode === 'clipboard' || brandMode === 'password' || brandMode === 'markdown') && !feedPanelOpen)) ? { width: `${widths[0]}%` } : { flex: 1 }}>
                 <SourcePanel
                   categories={store.categories}
                   selectedFeedId={selectedFeedId}
@@ -1420,7 +1444,7 @@ return (
             </div>
           )}
 
-          {feedPanelOpen ? (
+          {feedPanelOpen && brandMode !== 'password' && brandMode !== 'markdown' ? (
             <>
               <div className="panel panel-feed" style={allOpen ? { width: `${widths[1]}%` } : { flex: 1 }}>
                 {brandMode === 'note' ? (
@@ -1470,7 +1494,7 @@ return (
               </div>
               {allOpen && <ResizeHandle onMouseDown={(e) => handleMouseDown(1, e)} />}
             </>
-          ) : (brandMode !== 'editor' && brandMode !== 'draw' && brandMode !== 'translate' && brandMode !== 'expander' && brandMode !== 'clipboard') ? (
+          ) : (brandMode !== 'editor' && brandMode !== 'draw' && brandMode !== 'translate' && brandMode !== 'expander' && brandMode !== 'clipboard' && brandMode !== 'password' && brandMode !== 'markdown') ? (
             <div className="panel-strip" onClick={() => setFeedPanelOpen(true)} title="Ouvrir le panneau Feed (2)">
               <span className="panel-strip-icon">☰</span>
             </div>
@@ -1503,6 +1527,10 @@ return (
                   onRemoveShortcut={handleRemoveSnippetShortcut}
                   searchQuery={searchQuery}
                 />
+              ) : brandMode === 'markdown' ? (
+                <SuperMarkdown searchQuery={searchQuery} />
+              ) : brandMode === 'password' ? (
+                <SuperPassword searchQuery={searchQuery} userId={user?.id} />
               ) : brandMode === 'clipboard' ? (
                 <SuperClipboard
                   entries={clipEntries}
@@ -1514,6 +1542,7 @@ return (
                   onClearAll={handleClearClipboard}
                   onSetShortcut={handleSetClipShortcut}
                   onRemoveShortcut={handleRemoveClipShortcut}
+                  onConvertToNote={(content) => handleCreateNoteFromSelection(content, 'Clipboard')}
                   searchQuery={searchQuery}
                 />
               ) : brandMode === 'bookmark' ? (

@@ -12,6 +12,7 @@ interface SuperClipboardProps {
   onClearAll: () => void;
   onSetShortcut: (id: string, shortcut: string) => Promise<void>;
   onRemoveShortcut: (id: string) => Promise<void>;
+  onConvertToNote?: (content: string) => void;
   searchQuery: string;
 }
 
@@ -27,10 +28,15 @@ function groupEntries(entries: ClipEntry[]): Group[] {
   const DAY = 24 * HOUR;
   const WEEK = 7 * DAY;
 
+  const pinned: ClipEntry[] = [];
   const map: Record<string, ClipEntry[]> = {};
   const order: string[] = [];
 
   for (const e of entries) {
+    if (e.pinned) {
+      pinned.push(e);
+      continue;
+    }
     const age = now - e.timestamp;
     let label: string;
     if (age < HOUR) label = 'Dernière heure';
@@ -44,7 +50,11 @@ function groupEntries(entries: ClipEntry[]): Group[] {
     }
     map[label].push(e);
   }
-  return order.map(label => ({ label, items: map[label] }));
+
+  const groups: Group[] = [];
+  if (pinned.length > 0) groups.push({ label: '📌 Épinglés', items: pinned });
+  for (const label of order) groups.push({ label, items: map[label] });
+  return groups;
 }
 
 /** Format a shortcut string for display (e.g. "ctrl+shift+1" → ["Ctrl", "Shift", "1"]) */
@@ -62,12 +72,25 @@ export function SuperClipboard({
   onClearAll,
   onSetShortcut,
   onRemoveShortcut,
+  onConvertToNote,
   searchQuery,
 }: SuperClipboardProps) {
   const listRef = useRef<HTMLDivElement>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
   const [capturing, setCapturing] = useState(false);
   const [capturedParts, setCapturedParts] = useState<string[]>([]);
   const [shortcutError, setShortcutError] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; entry: ClipEntry } | null>(null);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) setCtxMenu(null);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [ctxMenu]);
 
   const sq = searchQuery.toLowerCase();
   const filtered = useMemo(
@@ -193,6 +216,12 @@ export function SuperClipboard({
                     onSelectEntry(c.id);
                     onPasteEntry(c.id);
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectEntry(c.id);
+                    setCtxMenu({ x: e.clientX, y: e.clientY, entry: c });
+                  }}
                 >
                   <span className="se-snippet-icon">{c.pinned ? '📌' : c.shortcut ? '⌨' : '📋'}</span>
                   <span className="se-snippet-name sc-clip-text">
@@ -292,6 +321,11 @@ export function SuperClipboard({
               <button className="sc-action-btn" onClick={() => onTogglePin(entry.id)} title={entry.pinned ? 'Désépingler' : 'Épingler'}>
                 📌 {entry.pinned ? 'Désépingler' : 'Épingler'}
               </button>
+              {onConvertToNote && (
+                <button className="sc-action-btn" onClick={() => onConvertToNote(entry.content)} title="Convertir en note">
+                  📝 Note
+                </button>
+              )}
               <button className="sc-action-btn sc-action-btn--danger" onClick={() => onDeleteEntry(entry.id)} title="Supprimer">
                 🗑 Supprimer
               </button>
@@ -330,6 +364,30 @@ export function SuperClipboard({
           </button>
         </div>
       </div>
+
+      {/* Context menu */}
+      {ctxMenu && (
+        <div
+          ref={ctxMenuRef}
+          className="feed-context-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          <button className="feed-context-menu-item" onClick={() => { onPasteEntry(ctxMenu.entry.id); setCtxMenu(null); }}>
+            <span>📋</span> Re-copier
+          </button>
+          <button className="feed-context-menu-item" onClick={() => { onTogglePin(ctxMenu.entry.id); setCtxMenu(null); }}>
+            <span>📌</span> {ctxMenu.entry.pinned ? 'Désépingler' : 'Épingler'}
+          </button>
+          {onConvertToNote && (
+            <button className="feed-context-menu-item" onClick={() => { onConvertToNote(ctxMenu.entry.content); setCtxMenu(null); }}>
+              <span>📝</span> Convertir en note
+            </button>
+          )}
+          <button className="feed-context-menu-item feed-context-menu-item--danger" onClick={() => { onDeleteEntry(ctxMenu.entry.id); setCtxMenu(null); }}>
+            <span>🗑</span> Supprimer
+          </button>
+        </div>
+      )}
     </div>
   );
 }

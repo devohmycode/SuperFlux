@@ -6,9 +6,9 @@ import type { PinEntry } from './SourcePanel';
 import type { FeedCategory, FeedSource } from '../types';
 import GlassIconButton from './GlassIconButton';
 
-const appWindow = getCurrentWindow();
+const appWindow = (() => { try { return getCurrentWindow(); } catch { return null; } })();
 
-type BrandMode = 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard';
+type BrandMode = 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown';
 
 interface TitleBarProps {
   isCollapsed: boolean;
@@ -85,6 +85,8 @@ const modeTabs: { mode: BrandMode; icon: string; label: string; shortcut: string
   { mode: 'translate', icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'indigo' },
   { mode: 'expander', icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
   { mode: 'clipboard', icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
+  { mode: 'password', icon: '🔐', label: 'Mots de passe', shortcut: '9', pro: true, color: 'rose' },
+  { mode: 'markdown', icon: '📓', label: 'Markdown', shortcut: '0', pro: true, color: 'sky' },
 ];
 
 export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favoritesCount = 0, readLaterCount = 0, pinnedItems = [], categories = [], onSelectFeed, onSync, isSyncing = false, showSysInfo = true, brandMode = 'flux', onBrandSwitch, isPro = false }: TitleBarProps) {
@@ -100,6 +102,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
   });
 
   useEffect(() => {
+    if (!appWindow) return;
     appWindow.isMaximized().then(setIsMaximized).catch(() => {});
     const unlisten = appWindow.onResized(() => {
       appWindow.isMaximized().then(setIsMaximized).catch(() => {});
@@ -109,6 +112,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
 
   // Apply always-on-top on mount and when toggled
   useEffect(() => {
+    if (!appWindow) return;
     appWindow.setAlwaysOnTop(alwaysOnTop).catch(() => {});
   }, [alwaysOnTop]);
 
@@ -334,7 +338,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
           <>
             <button
               className="titlebar-btn titlebar-btn-close"
-              onClick={() => appWindow.close()}
+              onClick={() => appWindow?.close()}
               title="Fermer"
             >
               <svg width="10" height="10" viewBox="0 0 10 10">
@@ -344,7 +348,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
             </button>
             <button
               className="titlebar-btn titlebar-btn-maximize"
-              onClick={() => appWindow.toggleMaximize()}
+              onClick={() => appWindow?.toggleMaximize()}
               title={isMaximized ? 'Restaurer' : 'Agrandir'}
             >
               {isMaximized ? (

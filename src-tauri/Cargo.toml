@@ -27,3 +27,12 @@ tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
+argon2 = "0.5"
+aes-gcm = "0.10"
+zeroize = { version = "1.7", features = ["derive"] }
+totp-rs = { version = "5", features = ["gen_secret", "otpauth"] }
+csv = "1"
+rand = "0.8"
+git2 = "0.20"
+serde_yaml = "0.9"
+regex = "1"

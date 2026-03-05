@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 mod clipboard;
 mod clipboard_history;
+mod markdown_vault;
+mod password_vault;
 mod snippets;
 #[cfg(not(target_os = "android"))]
 use tauri::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -764,12 +766,21 @@ pub fn run() {
             #[cfg(not(target_os = "android"))]
             saved: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, hide_to_tray, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window, save_file_dialog, pandoc_check, pandoc_import, pandoc_export, snippets::sync_snippets, snippets::set_snippet_shortcut, clipboard_history::get_clipboard_history, clipboard_history::delete_clip_entry, clipboard_history::clear_clipboard_history, clipboard_history::toggle_pin_clip_entry, clipboard_history::paste_clip_entry, clipboard_history::set_clip_shortcut, clipboard_history::get_clipboard_settings, clipboard_history::set_clipboard_settings])
+        .invoke_handler(tauri::generate_handler![fetch_url, http_request, open_external, get_cpu_usage, get_memory_usage, get_net_speed, collapse_window, expand_window, hide_to_tray, check_network, set_window_effect, tts_speak, tts_stop, tts_speak_elevenlabs, open_auth_window, save_file_dialog, pandoc_check, pandoc_import, pandoc_export, snippets::sync_snippets, snippets::set_snippet_shortcut, clipboard_history::get_clipboard_history, clipboard_history::delete_clip_entry, clipboard_history::clear_clipboard_history, clipboard_history::toggle_pin_clip_entry, clipboard_history::paste_clip_entry, clipboard_history::set_clip_shortcut, clipboard_history::get_clipboard_settings, clipboard_history::set_clipboard_settings, password_vault::pw_vault_exists, password_vault::pw_create_vault, password_vault::pw_unlock_vault, password_vault::pw_lock_vault, password_vault::pw_is_unlocked, password_vault::pw_get_entries, password_vault::pw_add_entry, password_vault::pw_update_entry, password_vault::pw_delete_entry, password_vault::pw_get_folders, password_vault::pw_add_folder, password_vault::pw_update_folder, password_vault::pw_delete_folder, password_vault::pw_generate_password, password_vault::pw_get_totp, password_vault::pw_copy_to_clipboard, password_vault::pw_change_master, password_vault::pw_audit_passwords, password_vault::pw_get_settings, password_vault::pw_update_settings, password_vault::pw_export_csv, password_vault::pw_import_csv, password_vault::pw_get_vault_blob, password_vault::pw_import_vault_blob, password_vault::pw_get_vault_meta, password_vault::pw_import_vault_meta, markdown_vault::md_pick_folder, markdown_vault::md_list_vault_files, markdown_vault::md_read_file, markdown_vault::md_write_file, markdown_vault::md_create_file, markdown_vault::md_create_folder, markdown_vault::md_delete_entry, markdown_vault::md_rename_entry, markdown_vault::md_resolve_wikilink, markdown_vault::md_list_md_files, markdown_vault::md_scan_vault_links, markdown_vault::md_get_backlinks, markdown_vault::md_search_in_vault, markdown_vault::md_replace_in_file, markdown_vault::md_git_repo_info, markdown_vault::md_git_status, markdown_vault::md_git_init, markdown_vault::md_git_stage, markdown_vault::md_git_unstage, markdown_vault::md_git_commit, markdown_vault::md_git_log, markdown_vault::md_git_diff, markdown_vault::md_git_diff_contents, markdown_vault::md_git_discard_changes, markdown_vault::md_git_list_branches, markdown_vault::md_git_checkout_branch, markdown_vault::md_git_create_branch, markdown_vault::md_git_push, markdown_vault::md_git_pull, markdown_vault::md_git_parse_conflicts, markdown_vault::md_git_resolve_conflict, markdown_vault::md_git_sync, markdown_vault::md_parse_file_metadata, markdown_vault::md_scan_vault_metadata, markdown_vault::md_get_vault_tags, ])
         .setup(|_app| {
             // Initialize snippet store and start global keyboard hook
             let snippet_store = Arc::new(snippets::SnippetStore::new());
             _app.manage(snippet_store.clone());
             snippets::start_keyword_expander(snippet_store);
+
+            // Initialize password vault store
+            let pw_store = Arc::new(password_vault::PasswordVaultStore::new());
+            if let Some(data_dir) = _app.path().app_data_dir().ok() {
+                let pw_dir = data_dir.join("password_vault");
+                pw_store.set_data_dir(pw_dir);
+            }
+            _app.manage(pw_store.clone());
+            password_vault::start_auto_lock_timer(pw_store);
 
             // Initialize clipboard history store and start monitor
             let clip_store = Arc::new(clipboard_history::ClipboardHistoryStore::new());

@@ -7,6 +7,10 @@ const gradientMapping: Record<string, string> = {
   indigo: 'linear-gradient(hsl(253, 90%, 50%), hsl(238, 90%, 50%))',
   orange: 'linear-gradient(hsl(43, 90%, 50%), hsl(28, 90%, 50%))',
   green: 'linear-gradient(hsl(123, 90%, 40%), hsl(108, 90%, 40%))',
+  teal: 'linear-gradient(hsl(173, 80%, 40%), hsl(158, 80%, 40%))',
+  amber: 'linear-gradient(hsl(38, 92%, 50%), hsl(25, 92%, 50%))',
+  rose: 'linear-gradient(hsl(340, 82%, 52%), hsl(325, 82%, 48%))',
+  sky: 'linear-gradient(hsl(199, 89%, 48%), hsl(184, 89%, 45%))',
 };
 
 interface GlassIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

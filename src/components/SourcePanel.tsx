@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from "motion/react";
 import type { Feed, FeedCategory, FeedItem, FeedSource } from "../types";
 import { SyncButton } from "./SyncButton";
@@ -23,6 +24,48 @@ import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
 import ShinyText from "./ShinyText";
 import GlassIconButton from "./GlassIconButton";
+import { isPwSyncEnabled, setPwSyncEnabled, getLastPwSync } from "../services/passwordSyncService";
+
+function PasswordSyncPanel() {
+  const [enabled, setEnabled] = useState(isPwSyncEnabled());
+  const [lastSync, setLastSync] = useState(getLastPwSync());
+
+  const toggle = useCallback(() => {
+    const next = !enabled;
+    setPwSyncEnabled(next);
+    setEnabled(next);
+    if (next) {
+      // Dispatch custom event so SuperPassword can trigger an immediate upload
+      window.dispatchEvent(new CustomEvent('pw-sync-toggled', { detail: { enabled: true } }));
+    }
+  }, [enabled]);
+
+  // Listen for sync updates
+  useEffect(() => {
+    const handler = () => setLastSync(getLastPwSync());
+    window.addEventListener('pw-sync-done', handler);
+    return () => window.removeEventListener('pw-sync-done', handler);
+  }, []);
+
+  return (
+    <div className="pw-sync-section">
+      <div className="pw-sync-toggle">
+        <label onClick={toggle}>Synchroniser le coffre</label>
+        <div
+          className={`pw-sync-slider ${enabled ? 'active' : ''}`}
+          onClick={toggle}
+          role="switch"
+          aria-checked={enabled}
+        />
+      </div>
+      {lastSync && (
+        <div className="pw-sync-status">
+          Dernière sync : {new Date(lastSync).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -52,9 +95,9 @@ interface SourcePanelProps {
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
   onToggleNotify?: (feedId: string) => void;
   onClose?: () => void;
-  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard';
+  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown';
   onToggleBrand: () => void;
-  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard') => void;
+  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown') => void;
   onSyncIntervalChange?: (interval: number) => void;
   onShowSysInfoChange?: (show: boolean) => void;
   showSysInfo?: boolean;
@@ -131,6 +174,52 @@ interface SourcePanelProps {
   onPasteClip?: (id: string) => void;
   onDeleteClip?: (id: string) => void;
   onTogglePinClip?: (id: string) => void;
+}
+
+const MD_VAULT_PATH_KEY = 'supermarkdown_vault_path';
+
+function MarkdownVaultButton() {
+  const [vaultPath, setVaultPath] = useState<string | null>(() => localStorage.getItem(MD_VAULT_PATH_KEY));
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<string>).detail;
+      setVaultPath(path);
+    };
+    window.addEventListener('vault-changed', handler);
+    return () => window.removeEventListener('vault-changed', handler);
+  }, []);
+
+  const handleOpen = useCallback(async () => {
+    try {
+      const selected = await invoke<string | null>('md_pick_folder');
+      if (selected) {
+        localStorage.setItem(MD_VAULT_PATH_KEY, selected);
+        setVaultPath(selected);
+        window.dispatchEvent(new CustomEvent('vault-changed', { detail: selected }));
+      }
+    } catch (e) {
+      console.error('Folder picker failed:', e);
+    }
+  }, []);
+
+  const vaultName = vaultPath?.split(/[/\\]/).pop() || null;
+
+  return (
+    <div style={{ padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <button
+        className="source-all-btn"
+        onClick={handleOpen}
+        title={vaultPath || 'Open Vault'}
+        style={{ gap: 8 }}
+      >
+        <span className="source-all-icon">📂</span>
+        <span className="source-all-label" style={{ flex: 1, textAlign: 'left' }}>
+          {vaultName || 'Open Vault'}
+        </span>
+      </button>
+    </div>
+  );
 }
 
 const sourceIcons: Record<string, string> = {
@@ -709,7 +798,7 @@ export function SourcePanel({
           <span className="brand-icon">◈</span>
           <button className="brand-name-btn" onClick={onToggleBrand}>
             <ShinyText
-              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : brandMode === 'translate' ? 'SuperTranslate' : brandMode === 'expander' ? 'SuperExpander' : brandMode === 'clipboard' ? 'SuperClipboard' : 'SuperBookmark'}
+              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : brandMode === 'translate' ? 'SuperTranslate' : brandMode === 'expander' ? 'SuperExpander' : brandMode === 'clipboard' ? 'SuperClipboard' : brandMode === 'password' ? 'SuperPassword' : brandMode === 'markdown' ? 'SuperMarkdown' : 'SuperBookmark'}
               speed={2}
               delay={0}
               color="#787878"
@@ -809,6 +898,10 @@ export function SourcePanel({
             onDeleteFolder={onDeleteDrawFolder ?? (() => {})}
             onMoveDocToFolder={onMoveDrawToFolder ?? (() => {})}
           />
+        ) : brandMode === 'password' ? (
+          <PasswordSyncPanel />
+        ) : brandMode === 'markdown' ? (
+          <MarkdownVaultButton />
         ) : (
         <>
         <button
@@ -931,13 +1024,15 @@ export function SourcePanel({
         <div className="mode-tab-bar">
           {([
             { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false, color: 'blue' },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'green' },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'orange' },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'orange' },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'green' },
             { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'indigo' },
-            { mode: 'translate' as const, icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'blue' },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'red' },
+            { mode: 'translate' as const, icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'indigo' },
             { mode: 'expander' as const, icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
             { mode: 'clipboard' as const, icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
+            { mode: 'password' as const, icon: '🔐', label: 'Password', shortcut: '9', pro: true, color: 'rose' },
+            { mode: 'markdown' as const, icon: '📓', label: 'Markdown', shortcut: '0', pro: true, color: 'sky' },
           ]).map(tab => {
             const locked = tab.pro && !isPro;
             return (
