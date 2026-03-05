@@ -1,6 +1,6 @@
 [package]
 name = "superflux"
-version = "7.0.0"
+version = "0.7.0"
 description = "SuperFlux RSS Reader"
 authors = ["you"]
 edition = "2021"
