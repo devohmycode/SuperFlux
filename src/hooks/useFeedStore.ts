@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Feed, FeedItem, FeedCategory, FeedSource } from '../types';
 import { fetchAndParseFeed, discoverFeedInfo } from '../services/rssService';
+import { notifyNewArticles, requestNotificationPermission } from '../services/notificationService';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -106,6 +107,7 @@ function buildCategories(feeds: Feed[], folders: Record<string, string[]>): Feed
 export interface FeedStoreCallbacks {
   onFeedAdded?: (feed: Feed) => void;
   onFeedRemoved?: (feedId: string) => void;
+  onFeedUpdated?: (feed: Feed) => void;
   onItemsChanged?: (items: FeedItem[]) => void;
   onNewItemsFetched?: (items: FeedItem[]) => void;
 }
@@ -136,6 +138,7 @@ export interface FeedStore {
   toggleBookmark: (itemId: string) => void;
   importFeeds: (feeds: { url: string; name: string; source: FeedSource }[]) => number;
   removeDuplicates: () => number;
+  cleanupOldItems: (retentionDays: number) => string[];
   setSummary: (itemId: string, summary: string) => void;
   setFullContent: (itemId: string, fullContent: string) => void;
   getItemsByFeed: (feedId: string) => FeedItem[];
@@ -154,6 +157,7 @@ export interface FeedStore {
   deleteFolder: (categoryId: string, path: string) => void;
   moveFeedToFolder: (feedId: string, folder: string | undefined) => void;
   reorderFeed: (feedId: string, targetFeedId: string, position: 'before' | 'after') => void;
+  toggleNotify: (feedId: string) => void;
 }
 
 export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
@@ -287,10 +291,10 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setItems(prev => prev.map(i => i.feedId === feedId ? { ...i, feedName: newName.trim() } : i));
   }, []);
 
-  // Sync a single feed
-  const syncFeed = useCallback(async (feedId: string) => {
+  // Sync a single feed - returns new items for notification handling
+  const syncFeed = useCallback(async (feedId: string): Promise<{ feed: Feed; newItems: FeedItem[] } | null> => {
     const feed = feeds.find(f => f.id === feedId);
-    if (!feed) return;
+    if (!feed) return null;
 
     try {
       const existingIds = new Set(
@@ -303,7 +307,9 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
         const timestampedItems = newItems.map(item => ({ ...item, updated_at: new Date().toISOString() }));
         setItems(prev => deduplicateItems([...timestampedItems, ...prev]));
         cbRef.current?.onNewItemsFetched?.(timestampedItems);
+        return { feed, newItems: timestampedItems };
       }
+      return { feed, newItems: [] };
     } catch (e) {
       console.error(`Failed to sync feed ${feed.name}:`, e);
       throw e;
@@ -323,7 +329,11 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
 
     for (const feed of feeds) {
       try {
-        await syncFeed(feed.id);
+        const result = await syncFeed(feed.id);
+        // Déclencher une notification si le feed a notifyOnNew activé
+        if (result && result.feed.notifyOnNew && result.newItems.length > 0) {
+          notifyNewArticles(result.newItems, result.feed.name);
+        }
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
         errors.push(`${feed.name} (${reason})`);
@@ -411,6 +421,29 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
       return removed > 0 ? deduped : prev;
     });
     return removed;
+  }, []);
+
+  // Cleanup old read items (retention policy)
+  const cleanupOldItems = useCallback((retentionDays: number): string[] => {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    let removedIds: string[] = [];
+    setItems(prev => {
+      const keep: FeedItem[] = [];
+      for (const item of prev) {
+        if (
+          item.publishedAt.getTime() < cutoff &&
+          item.isRead === true &&
+          !item.isStarred &&
+          !item.isBookmarked
+        ) {
+          removedIds.push(item.id);
+        } else {
+          keep.push(item);
+        }
+      }
+      return removedIds.length > 0 ? keep : prev;
+    });
+    return removedIds;
   }, []);
 
   // Toggle star
@@ -551,6 +584,26 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setFeeds(prev => prev.map(f => f.id === feedId ? { ...f, folder } : f));
   }, []);
 
+  // Toggle notifications for new articles
+  const toggleNotify = useCallback((feedId: string) => {
+    let updatedFeed: Feed | undefined;
+    setFeeds(prev => {
+      const feed = prev.find(f => f.id === feedId);
+      if (feed && !feed.notifyOnNew) {
+        // Turning on: request permission
+        requestNotificationPermission();
+      }
+      const next = prev.map(f =>
+        f.id === feedId ? { ...f, notifyOnNew: !f.notifyOnNew, updated_at: new Date().toISOString() } : f
+      );
+      updatedFeed = next.find(f => f.id === feedId);
+      return next;
+    });
+    queueMicrotask(() => {
+      if (updatedFeed) cbRef.current?.onFeedUpdated?.(updatedFeed);
+    });
+  }, []);
+
   // Reorder a feed before/after another feed in the array
   const reorderFeed = useCallback((feedId: string, targetFeedId: string, position: 'before' | 'after') => {
     if (feedId === targetFeedId) return;
@@ -608,6 +661,7 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     setFullContent,
     importFeeds,
     removeDuplicates,
+    cleanupOldItems,
     getItemsByFeed,
     getItemsBySource,
     getAllItems,
@@ -620,5 +674,6 @@ export function useFeedStore(callbacks?: FeedStoreCallbacks): FeedStore {
     deleteFolder,
     moveFeedToFolder,
     reorderFeed,
+    toggleNotify,
   };
 }

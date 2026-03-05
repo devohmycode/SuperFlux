@@ -1,22 +1,50 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { WebBookmark } from '../services/bookmarkService';
 import { extractArticle, type ExtractedArticle } from '../services/articleExtractor';
+import { translateText, getTranslationConfig } from '../services/translationService';
+import { applyHighlights } from '../lib/highlightHtml';
+import { usePro } from '../contexts/ProContext';
 import { openExternal } from '../lib/tauriFetch';
+import type { HighlightColor, TextHighlight } from '../types';
 
 type LoadStatus = 'idle' | 'loading' | 'done' | 'error';
+
+const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'orange'];
 
 interface BookmarkReaderProps {
   bookmark: WebBookmark | null;
   onMarkRead?: (id: string) => void;
+  translateActive?: boolean;
+  highlights?: TextHighlight[];
+  onHighlightAdd?: (bookmarkId: string, text: string, color: HighlightColor, prefix: string, suffix: string) => void;
+  onHighlightRemove?: (bookmarkId: string, highlightId: string) => void;
+  onHighlightNoteUpdate?: (bookmarkId: string, highlightId: string, note: string) => void;
+  onCreateNoteFromSelection?: (text: string, articleTitle: string) => void;
 }
 
-export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
+export function BookmarkReader({ bookmark, onMarkRead, translateActive: translateActiveProp, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onCreateNoteFromSelection }: BookmarkReaderProps) {
+  const { isPro, showUpgradeModal } = usePro();
   const [article, setArticle] = useState<ExtractedArticle | null>(null);
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [viewMode, setViewMode] = useState<'reader' | 'web'>('reader');
   const [fontSize, setFontSize] = useState(16);
+  const [translateState, setTranslateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [translatedHtml, setTranslatedHtml] = useState('');
+  const [translatedTitle, setTranslatedTitle] = useState('');
+  const showTranslation = translateActiveProp ?? false;
+
+  // Highlight state
+  const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
+  const [selectedText, setSelectedText] = useState('');
+  const [selectedPrefix, setSelectedPrefix] = useState('');
+  const [selectedSuffix, setSelectedSuffix] = useState('');
+  const [highlightsMenuOpen, setHighlightsMenuOpen] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
+
   const contentRef = useRef<HTMLDivElement>(null);
+  const readerBodyRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const prevUrlRef = useRef<string | null>(null);
 
@@ -25,6 +53,9 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
     if (!bookmark) {
       setArticle(null);
       setStatus('idle');
+      setTranslateState('idle');
+      setTranslatedHtml('');
+      setTranslatedTitle('');
       prevUrlRef.current = null;
       return;
     }
@@ -32,6 +63,9 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
     // Don't refetch if same URL
     if (bookmark.url === prevUrlRef.current) return;
     prevUrlRef.current = bookmark.url;
+    setTranslateState('idle');
+    setTranslatedHtml('');
+    setTranslatedTitle('');
 
     let cancelled = false;
     setStatus('loading');
@@ -65,6 +99,24 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
     openExternal(bookmark.url);
   }, [bookmark]);
 
+  // Auto-translate when translateActive prop is enabled
+  useEffect(() => {
+    if (!article || !showTranslation || translateState !== 'idle') return;
+    const config = getTranslationConfig();
+    setTranslateState('loading');
+    Promise.all([
+      translateText(article.content, config.targetLanguage),
+      translateText(article.title || bookmark?.title || '', config.targetLanguage),
+    ]).then(([result, titleResult]) => {
+      setTranslatedHtml(result);
+      setTranslatedTitle(titleResult);
+      setTranslateState('done');
+    }).catch(() => {
+      setTranslateState('error');
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [article, showTranslation, translateState]);
+
   const handleRetry = useCallback(() => {
     if (!bookmark) return;
     prevUrlRef.current = null; // force refetch
@@ -77,6 +129,92 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
       })
       .catch(() => setStatus('error'));
   }, [bookmark]);
+
+  // ── Highlight handlers ──
+  const processedHtml = useMemo(() => {
+    if (!article) return '';
+    const raw = showTranslation && translateState === 'done' && translatedHtml
+      ? translatedHtml
+      : article.content;
+    return applyHighlights(raw, highlights ?? []);
+  }, [article, showTranslation, translateState, translatedHtml, highlights]);
+
+  const handleTextSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+
+    const range = sel.getRangeAt(0);
+    const container = readerBodyRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) return;
+
+    const text = sel.toString().trim();
+    if (!text) return;
+
+    // Extract prefix/suffix for disambiguation
+    const fullText = container.textContent || '';
+    const preRange = document.createRange();
+    preRange.setStart(container, 0);
+    preRange.setEnd(range.startContainer, range.startOffset);
+    const offsetStart = preRange.toString().length;
+    const prefix = fullText.slice(Math.max(0, offsetStart - 30), offsetStart);
+    const suffix = fullText.slice(offsetStart + text.length, offsetStart + text.length + 30);
+
+    setSelectedText(text);
+    setSelectedPrefix(prefix);
+    setSelectedSuffix(suffix);
+
+    const rect = range.getBoundingClientRect();
+    setColorPickerPos({
+      x: rect.left + rect.width / 2,
+      y: rect.top - 10,
+    });
+  }, []);
+
+  const handleColorPick = useCallback((color: HighlightColor) => {
+    if (!bookmark || !selectedText) return;
+    onHighlightAdd?.(bookmark.id, selectedText, color, selectedPrefix, selectedSuffix);
+    setColorPickerPos(null);
+    setSelectedText('');
+    window.getSelection()?.removeAllRanges();
+  }, [bookmark, selectedText, selectedPrefix, selectedSuffix, onHighlightAdd]);
+
+  const handleScrollToHighlight = useCallback((highlightId: string) => {
+    const mark = readerBodyRef.current?.querySelector(`mark[data-highlight-id="${CSS.escape(highlightId)}"]`);
+    if (mark) {
+      mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      mark.classList.add('highlight-pulse');
+      setTimeout(() => mark.classList.remove('highlight-pulse'), 1500);
+    }
+    setHighlightsMenuOpen(false);
+  }, []);
+
+  const handleStartEditNote = useCallback((hlId: string, currentNote: string) => {
+    setEditingNoteId(hlId);
+    setNoteText(currentNote);
+  }, []);
+
+  const handleSaveNote = useCallback(() => {
+    if (!bookmark || !editingNoteId) return;
+    onHighlightNoteUpdate?.(bookmark.id, editingNoteId, noteText);
+    setEditingNoteId(null);
+    setNoteText('');
+  }, [bookmark, editingNoteId, noteText, onHighlightNoteUpdate]);
+
+  // Close color picker on click outside
+  useEffect(() => {
+    if (!colorPickerPos) return;
+    const close = (e: MouseEvent) => {
+      const picker = document.querySelector('.highlight-color-picker');
+      if (picker && picker.contains(e.target as Node)) return;
+      setColorPickerPos(null);
+      setSelectedText('');
+    };
+    const timeout = setTimeout(() => document.addEventListener('click', close), 10);
+    return () => {
+      clearTimeout(timeout);
+      document.removeEventListener('click', close);
+    };
+  }, [colorPickerPos]);
 
   if (!bookmark) {
     return (
@@ -137,6 +275,96 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
               >
                 A+
               </button>
+            </div>
+          )}
+          {/* Highlights menu */}
+          {viewMode === 'reader' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="bk-reader-viewbtn"
+                title={isPro ? "Surlignages" : "Surlignages (Pro)"}
+                onClick={isPro ? () => setHighlightsMenuOpen(prev => !prev) : showUpgradeModal}
+              >
+                {isPro ? (
+                  <span style={{ fontSize: '13px' }}>🖍</span>
+                ) : '🔒'}
+                {isPro && (highlights?.length ?? 0) > 0 && (
+                  <span className="highlights-badge">{highlights!.length}</span>
+                )}
+              </button>
+              {highlightsMenuOpen && (
+                <div className="highlights-menu-dropdown">
+                  <div className="highlights-menu-header">
+                    <span className="highlights-menu-title">Surlignages</span>
+                    {(highlights?.length ?? 0) > 0 && (
+                      <span className="highlights-badge">{highlights!.length}</span>
+                    )}
+                  </div>
+                  <div className="highlights-menu-list">
+                    {(!highlights || highlights.length === 0) ? (
+                      <div className="highlights-menu-empty">
+                        Sélectionnez du texte pour surligner
+                      </div>
+                    ) : highlights.map(hl => (
+                      <div
+                        key={hl.id}
+                        className="highlight-menu-item"
+                        onClick={() => handleScrollToHighlight(hl.id)}
+                      >
+                        <span
+                          className="highlight-menu-dot"
+                          style={{ background: `var(--highlight-${hl.color})` }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="highlight-menu-text">
+                            {hl.text.length > 60 ? hl.text.slice(0, 60) + '…' : hl.text}
+                          </div>
+                          {editingNoteId === hl.id ? (
+                            <input
+                              className="highlight-menu-note-input"
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveNote();
+                                if (e.key === 'Escape') { setEditingNoteId(null); setNoteText(''); }
+                              }}
+                              onBlur={handleSaveNote}
+                              onClick={(e) => e.stopPropagation()}
+                              autoFocus
+                              placeholder="Ajouter une note..."
+                            />
+                          ) : hl.note ? (
+                            <div
+                              className="highlight-menu-note"
+                              onClick={(e) => { e.stopPropagation(); handleStartEditNote(hl.id, hl.note); }}
+                            >
+                              {hl.note}
+                            </div>
+                          ) : (
+                            <button
+                              className="highlight-menu-note-action"
+                              onClick={(e) => { e.stopPropagation(); handleStartEditNote(hl.id, ''); }}
+                            >
+                              + note
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          className="highlight-menu-note-action"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onHighlightRemove?.(bookmark.id, hl.id);
+                          }}
+                          title="Supprimer"
+                          style={{ color: 'var(--red)', marginLeft: 4 }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {/* External link */}
@@ -207,15 +435,27 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
                     />
                   </div>
                 )}
-                <h1 className="bk-reader-title">{article.title || bookmark.title}</h1>
+                <h1 className="bk-reader-title">
+                  {showTranslation && translateState === 'done' && translatedTitle
+                    ? translatedTitle
+                    : (article.title || bookmark.title)}
+                </h1>
                 <div className="bk-reader-meta">
                   {article.byline && <span className="bk-reader-byline">{article.byline}</span>}
                   {article.siteName && <span className="bk-reader-sitename">{article.siteName}</span>}
                   <span className="bk-reader-date">{formatDate(bookmark.created_at)}</span>
                 </div>
+                {showTranslation && translateState === 'loading' && (
+                  <div className="bk-reader-loading-body" style={{ padding: '12px 0' }}>
+                    <span className="bk-reader-spinner" />
+                    <span>Traduction en cours...</span>
+                  </div>
+                )}
                 <div
                   className="bk-reader-body"
-                  dangerouslySetInnerHTML={{ __html: article.content }}
+                  ref={readerBodyRef}
+                  onMouseUp={isPro ? handleTextSelection : undefined}
+                  dangerouslySetInnerHTML={{ __html: processedHtml }}
                 />
               </motion.article>
             )}
@@ -234,6 +474,45 @@ export function BookmarkReader({ bookmark, onMarkRead }: BookmarkReaderProps) {
             sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
             referrerPolicy="no-referrer"
           />
+        </div>
+      )}
+
+      {/* Floating color picker */}
+      {colorPickerPos && (
+        <div
+          className="highlight-color-picker"
+          style={{
+            left: colorPickerPos.x,
+            top: colorPickerPos.y,
+            transform: 'translate(-50%, -100%)',
+          }}
+        >
+          {HIGHLIGHT_COLORS.map(color => (
+            <button
+              key={color}
+              className={`highlight-color-swatch ${color}`}
+              onClick={() => handleColorPick(color)}
+              title={color}
+            />
+          ))}
+          <div className="highlight-picker-divider" />
+          <button
+            className="highlight-note-btn"
+            onClick={() => {
+              if (selectedText && bookmark) {
+                onCreateNoteFromSelection?.(selectedText, bookmark.title);
+                setColorPickerPos(null);
+                setSelectedText('');
+                window.getSelection()?.removeAllRanges();
+              }
+            }}
+            title="Créer une note"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
         </div>
       )}
     </div>

@@ -172,8 +172,88 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
     return DEFAULT_SYNC_INTERVAL;
   });
 
+  // ── Retention state ──
+  const RETENTION_KEY = 'superflux_retention_days';
+  const RETENTION_OPTIONS = [
+    { value: 0, label: 'Désactivé' },
+    { value: 30, label: '30 jours' },
+    { value: 60, label: '60 jours' },
+    { value: 90, label: '90 jours' },
+    { value: 180, label: '180 jours' },
+    { value: 365, label: '365 jours' },
+  ] as const;
+  const [retentionDays, setRetentionDays] = useState(() => {
+    try {
+      const v = localStorage.getItem(RETENTION_KEY);
+      if (v) return Number(v);
+    } catch { /* ignore */ }
+    return 0;
+  });
+
+  // ── Notifications state ──
+  const NOTIF_KEY = 'superflux_notifications_enabled';
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    try { return localStorage.getItem(NOTIF_KEY) !== 'false'; }
+    catch { return true; }
+  });
+
   // ── RSSHub state ──
   const [rsshubInstance, setRsshubInstance] = useState(getRSSHubInstance);
+
+  // ── Storage mode state ──
+  const STORAGE_MODE_KEY = 'superflux_storage_mode';
+  type StorageMode = 'cloud' | 'local';
+  const [storageMode, setStorageMode] = useState<StorageMode>(
+    () => (localStorage.getItem(STORAGE_MODE_KEY) as StorageMode) || 'cloud'
+  );
+  const importDataRef = useRef<HTMLInputElement>(null);
+
+  const handleStorageModeChange = useCallback((mode: StorageMode) => {
+    setStorageMode(mode);
+    localStorage.setItem(STORAGE_MODE_KEY, mode);
+    if (mode === 'cloud' && user) {
+      // Re-trigger fullSync when switching back to cloud
+      import('../services/syncService').then(({ SyncService }) => {
+        SyncService.fullSync().catch(err => console.error('[settings] fullSync after cloud switch failed', err));
+      });
+    }
+  }, [user]);
+
+  const handleExportData = useCallback(async () => {
+    const data: Record<string, string> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('superflux_')) {
+        data[key] = localStorage.getItem(key) ?? '';
+      }
+    }
+    const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data }, null, 2);
+    const defaultName = `superflux-export-${new Date().toISOString().slice(0, 10)}.json`;
+    await invoke('save_file_dialog', { content: payload, defaultName });
+  }, []);
+
+  const handleImportData = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const json = JSON.parse(reader.result as string);
+        if (!json.version || !json.data || typeof json.data !== 'object') {
+          alert('Fichier invalide : format non reconnu.');
+          return;
+        }
+        for (const [key, value] of Object.entries(json.data)) {
+          localStorage.setItem(key, value as string);
+        }
+        window.location.reload();
+      } catch {
+        alert('Erreur lors de la lecture du fichier JSON.');
+      }
+    };
+    reader.readAsText(file);
+  }, []);
 
   const handleTtsEngineChange = useCallback((engine: TtsEngine) => {
     const updated = { ...ttsConfig, engine };
@@ -603,6 +683,111 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* ── Stockage ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Stockage</h3>
+                <p className="settings-section-desc">
+                  Choisissez où vos données sont enregistrées.
+                </p>
+
+                <div className="settings-format-toggle">
+                  <button
+                    className={`format-option ${storageMode === 'cloud' ? 'active' : ''}`}
+                    onClick={() => handleStorageModeChange('cloud')}
+                  >
+                    <span className="format-option-icon">☁</span>
+                    <span className="format-option-label">Cloud</span>
+                  </button>
+                  <button
+                    className={`format-option ${storageMode === 'local' ? 'active' : ''}`}
+                    onClick={() => handleStorageModeChange('local')}
+                  >
+                    <span className="format-option-icon">⌂</span>
+                    <span className="format-option-label">Local</span>
+                  </button>
+                </div>
+
+                <p className="settings-section-desc" style={{ marginTop: 8, fontSize: '11px', opacity: 0.7 }}>
+                  {storageMode === 'cloud'
+                    ? 'Données synchronisées avec le cloud.'
+                    : 'Données sur cet appareil uniquement.'}
+                </p>
+
+                {storageMode === 'local' && (
+                  <div className="provider-actions" style={{ marginTop: 8, gap: 8 }}>
+                    <button className="btn-secondary" onClick={handleExportData}>
+                      Exporter (JSON)
+                    </button>
+                    <button className="btn-secondary" onClick={() => importDataRef.current?.click()}>
+                      Importer (JSON)
+                    </button>
+                    <input
+                      ref={importDataRef}
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportData}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* ── Nettoyage ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Nettoyage</h3>
+                <p className="settings-section-desc">
+                  Supprime automatiquement les articles lus plus anciens que la durée choisie. Les favoris, marque-pages et non-lus sont toujours conservés.
+                </p>
+
+                <label className="settings-label">Rétention des articles</label>
+                <select
+                  className="provider-input"
+                  value={retentionDays}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setRetentionDays(v);
+                    localStorage.setItem(RETENTION_KEY, String(v));
+                  }}
+                >
+                  {RETENTION_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* ── Notifications ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">Notifications</h3>
+                <p className="settings-section-desc">
+                  Affiche une notification native lorsqu'un flux avec les notifications activées reçoit de nouveaux articles.
+                </p>
+
+                <label className="settings-label">Notifications globales</label>
+                <div className="settings-format-toggle">
+                  <button
+                    className={`format-option ${notificationsEnabled ? 'active' : ''}`}
+                    onClick={() => {
+                      setNotificationsEnabled(true);
+                      localStorage.setItem(NOTIF_KEY, 'true');
+                    }}
+                  >
+                    <span className="format-option-label">Activé</span>
+                  </button>
+                  <button
+                    className={`format-option ${!notificationsEnabled ? 'active' : ''}`}
+                    onClick={() => {
+                      setNotificationsEnabled(false);
+                      localStorage.setItem(NOTIF_KEY, 'false');
+                    }}
+                  >
+                    <span className="format-option-label">Désactivé</span>
+                  </button>
+                </div>
+                <p className="settings-section-desc" style={{ marginTop: 8, fontSize: '11px', opacity: 0.7 }}>
+                  Activez ensuite les notifications par flux via le clic droit sur un flux dans le panneau Sources.
+                </p>
               </div>
 
               {/* ── RSSHub ── */}

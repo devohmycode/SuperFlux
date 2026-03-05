@@ -4,7 +4,7 @@ import type { FeedComment, FeedItem, SummaryFormat, TextHighlight, HighlightColo
 import { AudioPlayer } from './AudioPlayer';
 import { fetchViaBackend, openExternal } from '../lib/tauriFetch';
 import { summarizeArticle } from '../services/llmService';
-import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
+import { translateText, getTranslationConfig } from '../services/translationService';
 import { extractArticle, isContentTruncated } from '../services/articleExtractor';
 import { applyHighlights } from '../lib/highlightHtml';
 import * as ttsService from '../services/ttsService';
@@ -53,8 +53,10 @@ interface ReaderPanelProps {
   onHighlightAdd?: (itemId: string, text: string, color: HighlightColor, prefix: string, suffix: string) => void;
   onHighlightRemove?: (itemId: string, highlightId: string) => void;
   onHighlightNoteUpdate?: (itemId: string, highlightId: string, note: string) => void;
+  onCreateNoteFromSelection?: (text: string, articleTitle: string) => void;
   onBackToFeeds?: () => void;
   onClose?: () => void;
+  translateActive?: boolean;
 }
 
 function formatDate(date: Date): string {
@@ -102,29 +104,78 @@ function getListingChildren(value: unknown): unknown[] {
   return data && Array.isArray(data.children) ? data.children : [];
 }
 
+/** Extract selftext HTML from a Reddit post data object */
+function extractSelftextFromPostData(postData: Record<string, unknown>): string | null {
+  const html = typeof postData.selftext_html === 'string' ? postData.selftext_html.trim() : '';
+  if (html) return html;
+  const plain = typeof postData.selftext === 'string' ? postData.selftext.trim() : '';
+  if (plain) {
+    return `<div class="md"><p>${plain.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>')}</p></div>`;
+  }
+  return null;
+}
+
 function buildRedditCommentsApiUrl(url: string): string {
   const cleanUrl = url.split('#')[0].split('?')[0].replace(/\/+$/, '');
   const jsonUrl = cleanUrl.endsWith('.json') ? cleanUrl : `${cleanUrl}.json`;
   const parsedUrl = new URL(jsonUrl);
-  const apiUrl = new URL(`https://api.reddit.com${parsedUrl.pathname}`);
+  // Use old.reddit.com — api.reddit.com requires OAuth since 2023
+  const apiUrl = new URL(`https://old.reddit.com${parsedUrl.pathname}`);
   apiUrl.searchParams.set('raw_json', '1');
   apiUrl.searchParams.set('limit', '30');
   apiUrl.searchParams.set('sort', 'best');
   return apiUrl.toString();
 }
 
-function parseRedditPayload(payload: unknown, maxComments = 30): { comments: FeedComment[]; count: number | null } {
+interface RedditPostMeta {
+  comments: FeedComment[];
+  count: number | null;
+  selftext: string | null;
+  postUrl: string | null;   // destination URL for link posts
+  isSelf: boolean;
+}
+
+function parseRedditPayload(payload: unknown, maxComments = 30): RedditPostMeta {
   if (!Array.isArray(payload)) {
-    return { comments: [], count: null };
+    return { comments: [], count: null, selftext: null, postUrl: null, isSelf: true };
   }
 
   let count: number | null = null;
+  let selftext: string | null = null;
+  let postUrl: string | null = null;
+  let isSelf = true;
   const postChildren = getListingChildren(payload[0]);
   if (postChildren.length > 0) {
     const post = asRecord(postChildren[0]);
     const postData = post ? asRecord(post.data) : null;
     if (postData && typeof postData.num_comments === 'number') {
       count = postData.num_comments;
+    }
+    if (postData) {
+      // Extract the post body — prefer selftext_html, fall back to selftext (markdown/plain)
+      selftext = extractSelftextFromPostData(postData);
+
+      // Handle cross-posts: extract selftext from the original post
+      if (!selftext && Array.isArray(postData.crosspost_parent_list)) {
+        for (const xpost of postData.crosspost_parent_list) {
+          const xData = asRecord(xpost);
+          if (xData) {
+            selftext = extractSelftextFromPostData(xData);
+            if (selftext) break;
+          }
+        }
+      }
+
+      // Extract destination URL and is_self flag for link posts
+      isSelf = postData.is_self === true;
+      if (typeof postData.url === 'string' && postData.url.trim()) {
+        let rawUrl = postData.url.trim();
+        // Resolve relative Reddit URLs to absolute
+        if (rawUrl.startsWith('/')) {
+          rawUrl = `https://old.reddit.com${rawUrl}`;
+        }
+        postUrl = rawUrl;
+      }
     }
   }
 
@@ -165,12 +216,65 @@ function parseRedditPayload(payload: unknown, maxComments = 30): { comments: Fee
 
   collect(getListingChildren(payload[1]));
 
-  return { comments, count };
+  return { comments, count, selftext, postUrl, isSelf };
+}
+
+/** Convert a Reddit media URL (image/video) to an HTML element */
+function redditMediaToHtml(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname;
+
+    // Image posts: i.redd.it, preview.redd.it, i.imgur.com
+    if (
+      host === 'i.redd.it' ||
+      host === 'preview.redd.it' ||
+      host === 'i.imgur.com' ||
+      /\.(jpg|jpeg|png|gif|webp)$/i.test(parsed.pathname)
+    ) {
+      return `<figure class="reddit-media"><img src="${url}" loading="lazy" style="max-width:100%;border-radius:8px" /></figure>`;
+    }
+
+    // Video posts: v.redd.it
+    if (host === 'v.redd.it') {
+      // v.redd.it URLs need /DASH_720.mp4 or similar — use HLS fallback
+      const dashUrl = `${url.replace(/\/+$/, '')}/DASH_720.mp4`;
+      return `<figure class="reddit-media"><video controls preload="metadata" style="max-width:100%;border-radius:8px"><source src="${dashUrl}" type="video/mp4" />Votre navigateur ne supporte pas la lecture vidéo. <a href="${url}" target="_blank">Voir la vidéo</a></video></figure>`;
+    }
+  } catch { /* invalid URL */ }
+  return null;
+}
+
+/** Convert Reddit image URLs (preview.redd.it, i.redd.it, imgur) in HTML to <img> tags */
+function convertRedditImageLinks(html: string): string {
+  const imgDomains = ['preview.redd.it', 'i.redd.it', 'i.imgur.com', 'imgur.com'];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  let changed = false;
+
+  for (const a of Array.from(doc.querySelectorAll('a'))) {
+    const href = a.getAttribute('href');
+    if (!href) continue;
+    try {
+      const url = new URL(href);
+      const isImage = imgDomains.some(d => url.hostname === d || url.hostname.endsWith('.' + d));
+      const hasImageExt = /\.(jpg|jpeg|png|gif|webp)/i.test(url.pathname);
+      if (isImage || hasImageExt) {
+        const img = doc.createElement('img');
+        img.setAttribute('src', href);
+        img.setAttribute('loading', 'lazy');
+        img.style.maxWidth = '100%';
+        a.replaceWith(img);
+        changed = true;
+      }
+    } catch { /* invalid URL, skip */ }
+  }
+
+  return changed ? doc.body.innerHTML : html;
 }
 
 const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'orange'];
 
-export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onBackToFeeds, onClose }: ReaderPanelProps) {
+export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onCreateNoteFromSelection, onBackToFeeds, onClose, translateActive: translateActiveProp }: ReaderPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useState<ViewMode>('reader');
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>('idle');
@@ -192,8 +296,10 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   const [translateState, setTranslateState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [translatedHtml, setTranslatedHtml] = useState('');
   const [translatedTitle, setTranslatedTitle] = useState('');
+  const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
+  const translatingCommentIdsRef = useRef<Set<string>>(new Set());
   const [translateError, setTranslateError] = useState('');
-  const [showTranslation, setShowTranslation] = useState(false);
+  const showTranslation = translateActiveProp ?? false;
   const [colorPickerPos, setColorPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [selectedText, setSelectedText] = useState('');
   const [selectedPrefix, setSelectedPrefix] = useState('');
@@ -213,8 +319,15 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
   // Sources that don't need full-text extraction
   const skipExtraction = item?.source === 'reddit' || item?.source === 'youtube' || item?.source === 'twitter';
 
+  // Reddit selftext extracted from JSON API
+  const [redditSelftext, setRedditSelftext] = useState<string | null>(null);
+
   // HTML with highlights applied
-  const rawHtml = fullContentStatus === 'done' && fullContentHtml ? fullContentHtml : item?.content ?? '';
+  const rawHtml = fullContentStatus === 'done' && fullContentHtml
+    ? fullContentHtml
+    : redditSelftext
+      ? redditSelftext
+      : item?.content ?? '';
   const processedHtml = useMemo(() => {
     if (!rawHtml) return '';
     return applyHighlights(rawHtml, highlights ?? []);
@@ -241,13 +354,15 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     setSelectedText('');
     setHighlightsMenuOpen(false);
     setEditingNoteId(null);
+    // Reset Reddit selftext
+    setRedditSelftext(null);
     // Reset translation (keep autoTranslate intent)
     setTranslateState('idle');
     setTranslatedHtml('');
     setTranslatedTitle('');
+    setTranslatedComments({});
+    translatingCommentIdsRef.current.clear();
     setTranslateError('');
-    const { autoTranslate } = getTranslationConfig();
-    setShowTranslation(autoTranslate);
     // Reset or restore full content
     if (item?.fullContent) {
       setFullContentStatus('done');
@@ -259,15 +374,14 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     }
   }, [item?.id]);
 
-  // Auto-translate when autoTranslate is enabled and a new article loads
+  // Auto-translate when translateActive prop is enabled
   useEffect(() => {
     if (!item || !showTranslation || translateState !== 'idle') return;
-    const config = getTranslationConfig();
-    if (!config.autoTranslate) return;
 
-    const contentToTranslate = item.fullContent || item.content;
+    const contentToTranslate = fullContentHtml || item.fullContent || item.content;
     if (!contentToTranslate) return;
 
+    const config = getTranslationConfig();
     setTranslateState('loading');
     setTranslateError('');
     Promise.all([
@@ -280,7 +394,6 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     }).catch((e) => {
       setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
       setTranslateState('error');
-      setShowTranslation(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id, showTranslation, translateState]);
@@ -489,6 +602,42 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     ? (redditCommentsState.count ?? item.commentCount ?? redditComments.length)
     : null;
 
+  // Translate Reddit comments when they become available and translation is active
+  useEffect(() => {
+    if (!showTranslation || translateState !== 'done') return;
+    if (redditComments.length === 0) return;
+
+    const untranslated = redditComments.filter(
+      c => !(c.id in translatedComments) && !translatingCommentIdsRef.current.has(c.id)
+    );
+    if (untranslated.length === 0) return;
+
+    untranslated.forEach(c => translatingCommentIdsRef.current.add(c.id));
+
+    const config = getTranslationConfig();
+    let cancelled = false;
+
+    const numbered = untranslated.map((c, i) => `[${i + 1}] ${c.body}`).join('\n\n');
+    translateText(numbered, config.targetLanguage).then(result => {
+      if (cancelled) return;
+      const parts = result.split(/\[(\d+)\]\s*/);
+      const map: Record<string, string> = {};
+      for (let i = 1; i < parts.length; i += 2) {
+        const idx = parseInt(parts[i], 10) - 1;
+        const text = (parts[i + 1] || '').trim();
+        if (idx >= 0 && idx < untranslated.length && text) {
+          map[untranslated[idx].id] = text;
+        }
+      }
+      setTranslatedComments(prev => ({ ...prev, ...map }));
+    }).catch(() => {
+      untranslated.forEach(c => translatingCommentIdsRef.current.delete(c.id));
+    });
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showTranslation, translateState, redditComments]);
+
   useEffect(() => {
     if (!item || item.source !== 'reddit') {
       setRedditCommentsState({
@@ -526,10 +675,43 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
     const fetchComments = async () => {
       try {
         const apiUrl = buildRedditCommentsApiUrl(url);
+        console.log('[Reddit] Fetching:', apiUrl);
         const text = await fetchViaBackend(apiUrl);
+
+        // Guard: if response is not JSON (e.g. Reddit block page), skip
+        const trimmed = text.trimStart();
+        if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+          console.warn('[Reddit] Response is not JSON, likely blocked:', text.slice(0, 200));
+          throw new Error('Reddit returned non-JSON response');
+        }
+
         const payload = JSON.parse(text);
         const parsed = parseRedditPayload(payload);
+        console.log('[Reddit] Parsed:', { selftext: !!parsed.selftext, isSelf: parsed.isSelf, comments: parsed.comments.length, postUrl: parsed.postUrl });
         const parsedComments = parsed.comments.length > 0 ? parsed.comments : fallbackComments;
+
+        // Use selftext from JSON API as the article body
+        if (parsed.selftext) {
+          // Convert Reddit image URLs in selftext to actual <img> tags
+          setRedditSelftext(convertRedditImageLinks(parsed.selftext));
+        } else if (parsed.postUrl) {
+          const mediaHtml = redditMediaToHtml(parsed.postUrl);
+          if (mediaHtml) {
+            // Image/video post: render media directly
+            setRedditSelftext(mediaHtml);
+          } else if (!parsed.postUrl.includes('reddit.com')) {
+            // Link post to external site: extract article content
+            extractArticle(parsed.postUrl)
+              .then(article => {
+                setFullContentHtml(article.content);
+                setFullContentStatus('done');
+                onFullContentExtractedRef.current?.(item.id, article.content);
+              })
+              .catch(() => {
+                // Silently fail — fall back to RSS content
+              });
+          }
+        }
 
         setRedditCommentsState({
           status: 'success',
@@ -539,6 +721,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
         });
       } catch (error) {
         if (controller.signal.aborted) return;
+        console.warn('[Reddit] API fetch failed:', error);
         setRedditCommentsState({
           status: 'error',
           comments: fallbackComments,
@@ -688,38 +871,6 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       setSummaryState('error');
     }
   }, [item, summaryState, onSummaryGenerated]);
-
-  const handleTranslate = useCallback(async () => {
-    if (!item) return;
-    // Toggle: if already translated, just switch view and update global pref
-    if (translateState === 'done') {
-      const next = !showTranslation;
-      setShowTranslation(next);
-      saveTranslationConfig({ autoTranslate: next });
-      return;
-    }
-    if (translateState === 'loading') return;
-
-    setTranslateState('loading');
-    setTranslateError('');
-    setShowTranslation(true);
-    saveTranslationConfig({ autoTranslate: true });
-    try {
-      const config = getTranslationConfig();
-      const contentToTranslate = fullContentHtml || item.fullContent || item.content;
-      const [result, titleResult] = await Promise.all([
-        translateText(contentToTranslate, config.targetLanguage),
-        translateText(item.title, config.targetLanguage),
-      ]);
-      setTranslatedHtml(result);
-      setTranslatedTitle(titleResult);
-      setTranslateState('done');
-    } catch (e) {
-      setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
-      setTranslateState('error');
-      setShowTranslation(false);
-    }
-  }, [item, translateState, fullContentHtml]);
 
   const breadcrumbBar = breadcrumb && !feedPanelOpen ? (
     <div className="reader-breadcrumb">
@@ -882,17 +1033,6 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                   ■
                 </button>
               )}
-              <button
-                className={`reader-tool-btn ${showTranslation ? 'active' : ''}`}
-                title={showTranslation ? 'Voir l\'original' : 'Traduire'}
-                onClick={handleTranslate}
-                disabled={translateState === 'loading'}
-              >
-                {translateState === 'loading' ? (
-                  <span className="btn-spinner" />
-                ) : '🌐'}
-              </button>
-
               {/* Highlights menu */}
               <div style={{ position: 'relative' }}>
                 <button
@@ -1166,7 +1306,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {showTranslation && translateState === 'error' && (
               <div className="reader-fullcontent-banner error">
                 <span>{translateError}</span>
-                <button className="reader-fullcontent-btn" onClick={handleTranslate}>
+                <button className="reader-fullcontent-btn" onClick={() => setTranslateState('idle')}>
                   Réessayer
                 </button>
               </div>
@@ -1214,7 +1354,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                         <span className="reader-meta-dot">·</span>
                         <time className="reader-comment-time">{formatCommentTime(comment.publishedAt)}</time>
                       </div>
-                      <p className="reader-comment-body">{comment.body}</p>
+                      <p className="reader-comment-body">{showTranslation && translatedComments[comment.id] ? translatedComments[comment.id] : comment.body}</p>
                     </article>
                   ))}
                 </div>
@@ -1348,6 +1488,24 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               title={color}
             />
           ))}
+          <div className="highlight-picker-divider" />
+          <button
+            className="highlight-note-btn"
+            onClick={() => {
+              if (selectedText && item) {
+                onCreateNoteFromSelection?.(selectedText, item.title);
+                setColorPickerPos(null);
+                setSelectedText('');
+                window.getSelection()?.removeAllRanges();
+              }
+            }}
+            title="Créer une note"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+          </button>
         </div>
       )}
     </div>

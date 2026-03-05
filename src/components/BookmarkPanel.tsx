@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchBookmarks, removeBookmark, toggleBookmarkRead, type WebBookmark } from '../services/bookmarkService';
+import { translateText, getTranslationConfig, saveTranslationConfig } from '../services/translationService';
 import GradientText from './GradientText';
 import GlassIconButton from './GlassIconButton';
 
@@ -21,13 +22,17 @@ interface BookmarkPanelProps {
   bookmarkFolders?: string[];
   onSelectBookmark?: (bookmark: WebBookmark) => void;
   onMoveBookmarkToFolder?: (bookmarkId: string, folder: string | undefined) => void;
+  translateActive?: boolean;
+  onTranslateActiveChange?: (active: boolean) => void;
 }
+
+const IMPORTANT_FOLDER = 'Importants';
 
 type ContextMenuState =
   | { kind: 'bookmark'; x: number; y: number; bookmarkId: string }
   | null;
 
-export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFolderMap, bookmarkFolders, onSelectBookmark, onMoveBookmarkToFolder }: BookmarkPanelProps) {
+export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFolderMap, bookmarkFolders, onSelectBookmark, onMoveBookmarkToFolder, translateActive: translateActiveProp, onTranslateActiveChange }: BookmarkPanelProps) {
   const { user } = useAuth();
   const [bookmarks, setBookmarks] = useState<WebBookmark[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +43,12 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
   });
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [folderSubmenuOpen, setFolderSubmenuOpen] = useState(false);
+
+  // ── Translation (controlled by parent) ──
+  const translateActive = translateActiveProp ?? false;
+  const setTranslateActive = useCallback((v: boolean) => { onTranslateActiveChange?.(v); }, [onTranslateActiveChange]);
+  const [translateLoading, setTranslateLoading] = useState(false);
+  const [translatedItems, setTranslatedItems] = useState<Record<string, { title: string; excerpt: string }>>({});
 
   useEffect(() => {
     try { localStorage.setItem('superflux_bk_viewmode', viewMode); }
@@ -98,6 +109,39 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
     filtered = filtered.filter(b => bookmarkFolderMap[b.id] === selectedFolder);
   }
 
+  const handleTranslateList = useCallback(async () => {
+    if (translateLoading) return;
+    if (translateActive) {
+      setTranslateActive(false);
+      saveTranslationConfig({ autoTranslate: false });
+      return;
+    }
+    setTranslateActive(true);
+    saveTranslationConfig({ autoTranslate: true });
+
+    setTranslateLoading(true);
+    try {
+      const config = getTranslationConfig();
+      const toTranslate = filtered.filter(i => !translatedItems[i.id]);
+      const results = await Promise.all(
+        toTranslate.map(async (bk) => {
+          const [title, excerpt] = await Promise.all([
+            translateText(bk.title, config.targetLanguage),
+            bk.excerpt ? translateText(bk.excerpt, config.targetLanguage) : Promise.resolve(''),
+          ]);
+          return { id: bk.id, title, excerpt };
+        })
+      );
+      setTranslatedItems(prev => {
+        const next = { ...prev };
+        for (const r of results) next[r.id] = { title: r.title, excerpt: r.excerpt };
+        return next;
+      });
+    } finally {
+      setTranslateLoading(false);
+    }
+  }, [translateLoading, translateActive, filtered, translatedItems]);
+
   if (!user) {
     return (
       <div className="bookmark-panel-empty">
@@ -154,6 +198,14 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
             active={viewMode === 'compact'}
           />
           <GlassIconButton
+            color="blue"
+            icon={translateLoading ? <span className="btn-spinner" /> : '🌐'}
+            title={translateActive ? 'Voir les originaux' : 'Traduire la liste'}
+            onClick={handleTranslateList}
+            disabled={translateLoading || bookmarks.length === 0}
+            active={translateActive}
+          />
+          <GlassIconButton
             color="purple"
             icon="↻"
             title="Actualiser"
@@ -197,7 +249,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                     />
                   )}
                   <div className="bk-compact-item__text">
-                    <h3 className="bk-compact-item__title">{bk.title}</h3>
+                    <h3 className="bk-compact-item__title">{translateActive && translatedItems[bk.id] ? translatedItems[bk.id].title : bk.title}</h3>
                     <div className="bk-compact-item__meta">
                       <span className="bk-compact-item__site">{bk.site_name || new URL(bk.url).hostname}</span>
                       <span className="bk-compact-item__sep">·</span>
@@ -209,6 +261,17 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                   </div>
                 </div>
                 <div className="bk-compact-item__actions">
+                  <button
+                    className={`bk-compact-item__btn bk-compact-item__btn--star ${bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const isImportant = bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER;
+                      onMoveBookmarkToFolder?.(bk.id, isImportant ? undefined : IMPORTANT_FOLDER);
+                    }}
+                    title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'Retirer des Importants' : 'Ajouter aux Importants'}
+                  >
+                    {bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? '★' : '☆'}
+                  </button>
                   <button
                     className="bk-compact-item__btn"
                     onClick={(e) => handleToggleRead(bk.id, !bk.is_read, e)}
@@ -267,10 +330,10 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                   <div className="bk-blob-card__body">
                     <div className="bk-blob-card__title-row">
                       {!bk.is_read && <span className="bk-blob-card__unread" />}
-                      <h3 className="bk-blob-card__title">{bk.title}</h3>
+                      <h3 className="bk-blob-card__title">{translateActive && translatedItems[bk.id] ? translatedItems[bk.id].title : bk.title}</h3>
                     </div>
-                    {bk.excerpt && (
-                      <p className="bk-blob-card__excerpt">{bk.excerpt}</p>
+                    {(bk.excerpt || (translateActive && translatedItems[bk.id]?.excerpt)) && (
+                      <p className="bk-blob-card__excerpt">{translateActive && translatedItems[bk.id] ? translatedItems[bk.id].excerpt : bk.excerpt}</p>
                     )}
                   </div>
 
@@ -284,6 +347,17 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                       )}
                     </div>
                     <div className="bk-blob-card__actions">
+                      <button
+                        className={`bk-blob-card__action-btn bk-blob-card__action-btn--star ${bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const isImportant = bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER;
+                          onMoveBookmarkToFolder?.(bk.id, isImportant ? undefined : IMPORTANT_FOLDER);
+                        }}
+                        title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'Retirer des Importants' : 'Ajouter aux Importants'}
+                      >
+                        {bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? '★' : '☆'}
+                      </button>
                       <button
                         className="bk-blob-card__action-btn"
                         onClick={(e) => handleToggleRead(bk.id, !bk.is_read, e)}

@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { WebBookmark } from '../services/bookmarkService';
 
+const IMPORTANT_FOLDER = 'Importants';
+
 interface BookmarkSourceListProps {
   folders: string[];
   folderCounts: Record<string, number>;
@@ -82,6 +84,7 @@ export function BookmarkSourceList({
   const handleFolderContext = useCallback((e: React.MouseEvent, folder: string) => {
     e.preventDefault();
     e.stopPropagation();
+    if (folder === IMPORTANT_FOLDER) return; // No context menu for Importants
     setContextMenu({ kind: 'folder', x: e.clientX, y: e.clientY, folder });
   }, []);
 
@@ -191,7 +194,7 @@ export function BookmarkSourceList({
                 onContextMenu={(e) => handleFolderContext(e, folder)}
               >
                 <span className={`subfolder-chevron ${isExpanded ? 'expanded' : ''}`}>›</span>
-                <span className="subfolder-icon">📁</span>
+                <span className="subfolder-icon">{folder === IMPORTANT_FOLDER ? '★' : '📁'}</span>
                 <span className="subfolder-name">{folder}</span>
                 <span className="subfolder-count">{count}</span>
               </button>

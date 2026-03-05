@@ -148,4 +148,4 @@ src-tauri/target/
 # Android signing
 *.keystore
 *.jks
-keystore.properties
+keystore.properties.playwright-mcp/

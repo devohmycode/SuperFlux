@@ -68,6 +68,77 @@ function resolveInput(raw: string, currentSource: FeedSource): { url: string; na
     };
   }
 
+  // --- Blog platform auto-detection → resolve to RSS feed URL ---
+
+  // Substack: name.substack.com → name.substack.com/feed
+  const substackMatch = trimmed.match(/^https?:\/\/([\w-]+)\.substack\.com(\/.*)?$/i);
+  if (substackMatch) {
+    const name = substackMatch[1];
+    return { url: `https://${name}.substack.com/feed`, name, source: 'article', shorthand: `${name}.substack.com/feed` };
+  }
+
+  // Medium: medium.com/@user or user.medium.com → /feed
+  const mediumUserMatch = trimmed.match(/^https?:\/\/medium\.com\/@([\w-]+)(\/.*)?$/i);
+  if (mediumUserMatch) {
+    const user = mediumUserMatch[1];
+    return { url: `https://medium.com/feed/@${user}`, name: user, source: 'article', shorthand: `medium.com/feed/@${user}` };
+  }
+  const mediumSubdomainMatch = trimmed.match(/^https?:\/\/([\w-]+)\.medium\.com(\/.*)?$/i);
+  if (mediumSubdomainMatch) {
+    const user = mediumSubdomainMatch[1];
+    return { url: `https://${user}.medium.com/feed`, name: user, source: 'article', shorthand: `${user}.medium.com/feed` };
+  }
+  // Medium publication: medium.com/publication-name (no @)
+  const mediumPubMatch = trimmed.match(/^https?:\/\/medium\.com\/([\w-]+)(\/.*)?$/i);
+  if (mediumPubMatch) {
+    const pub = mediumPubMatch[1];
+    return { url: `https://medium.com/feed/${pub}`, name: pub, source: 'article', shorthand: `medium.com/feed/${pub}` };
+  }
+
+  // Blogger/Blogspot: name.blogspot.com → /feeds/posts/default?alt=rss
+  const bloggerMatch = trimmed.match(/^https?:\/\/([\w-]+)\.blogspot\.com(\/.*)?$/i);
+  if (bloggerMatch) {
+    const name = bloggerMatch[1];
+    return { url: `https://${name}.blogspot.com/feeds/posts/default?alt=rss`, name, source: 'article', shorthand: `${name}.blogspot.com (RSS)` };
+  }
+
+  // Tumblr: name.tumblr.com → /rss
+  const tumblrMatch = trimmed.match(/^https?:\/\/([\w-]+)\.tumblr\.com(\/.*)?$/i);
+  if (tumblrMatch) {
+    const name = tumblrMatch[1];
+    return { url: `https://${name}.tumblr.com/rss`, name, source: 'article', shorthand: `${name}.tumblr.com/rss` };
+  }
+
+  // Hashnode: name.hashnode.dev → /rss.xml
+  const hashnodeMatch = trimmed.match(/^https?:\/\/([\w-]+)\.hashnode\.dev(\/.*)?$/i);
+  if (hashnodeMatch) {
+    const name = hashnodeMatch[1];
+    return { url: `https://${name}.hashnode.dev/rss.xml`, name, source: 'article', shorthand: `${name}.hashnode.dev/rss.xml` };
+  }
+
+  // DEV.to: dev.to/@?username → /feed/username
+  const devtoMatch = trimmed.match(/^https?:\/\/dev\.to\/@?([\w-]+)(\/.*)?$/i);
+  if (devtoMatch) {
+    const user = devtoMatch[1];
+    if (user !== 'feed' && user !== 'search' && user !== 'settings') {
+      return { url: `https://dev.to/feed/${user}`, name: user, source: 'article', shorthand: `dev.to/feed/${user}` };
+    }
+  }
+
+  // WordPress.com: name.wordpress.com → /feed/
+  const wpMatch = trimmed.match(/^https?:\/\/([\w-]+)\.wordpress\.com(\/.*)?$/i);
+  if (wpMatch) {
+    const name = wpMatch[1];
+    return { url: `https://${name}.wordpress.com/feed/`, name, source: 'article', shorthand: `${name}.wordpress.com/feed` };
+  }
+
+  // Ghost.io hosted: name.ghost.io → /rss/
+  const ghostMatch = trimmed.match(/^https?:\/\/([\w-]+)\.ghost\.io(\/.*)?$/i);
+  if (ghostMatch) {
+    const name = ghostMatch[1];
+    return { url: `https://${name}.ghost.io/rss/`, name, source: 'article', shorthand: `${name}.ghost.io/rss` };
+  }
+
   // Full URL — keep as-is
   return { url: trimmed, name: '', source: currentSource, shorthand: null };
 }

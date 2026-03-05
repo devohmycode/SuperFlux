@@ -4,8 +4,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { fetchViaBackend } from '../lib/tauriFetch';
 import type { PinEntry } from './SourcePanel';
 import type { FeedCategory, FeedSource } from '../types';
+import GlassIconButton from './GlassIconButton';
 
-const appWindow = getCurrentWindow();
+const appWindow = (() => { try { return getCurrentWindow(); } catch { return null; } })();
+
+type BrandMode = 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown';
 
 interface TitleBarProps {
   isCollapsed: boolean;
@@ -19,6 +22,9 @@ interface TitleBarProps {
   onSync?: () => void;
   isSyncing?: boolean;
   showSysInfo?: boolean;
+  brandMode?: BrandMode;
+  onBrandSwitch?: (mode: BrandMode) => void;
+  isPro?: boolean;
 }
 
 interface WeatherData {
@@ -70,7 +76,20 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favoritesCount = 0, readLaterCount = 0, pinnedItems = [], categories = [], onSelectFeed, onSync, isSyncing = false, showSysInfo = true }: TitleBarProps) {
+const modeTabs: { mode: BrandMode; icon: string; label: string; shortcut: string; pro: boolean; color: string }[] = [
+  { mode: 'flux', icon: '◈', label: 'Flux', shortcut: '1', pro: false, color: 'blue' },
+  { mode: 'bookmark', icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'orange' },
+  { mode: 'note', icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'green' },
+  { mode: 'editor', icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
+  { mode: 'draw', icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'red' },
+  { mode: 'translate', icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'indigo' },
+  { mode: 'expander', icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
+  { mode: 'clipboard', icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
+  { mode: 'password', icon: '🔐', label: 'Mots de passe', shortcut: '9', pro: true, color: 'rose' },
+  { mode: 'markdown', icon: '📓', label: 'Markdown', shortcut: '0', pro: true, color: 'sky' },
+];
+
+export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favoritesCount = 0, readLaterCount = 0, pinnedItems = [], categories = [], onSelectFeed, onSync, isSyncing = false, showSysInfo = true, brandMode = 'flux', onBrandSwitch, isPro = false }: TitleBarProps) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [now, setNow] = useState(new Date());
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -83,6 +102,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
   });
 
   useEffect(() => {
+    if (!appWindow) return;
     appWindow.isMaximized().then(setIsMaximized).catch(() => {});
     const unlisten = appWindow.onResized(() => {
       appWindow.isMaximized().then(setIsMaximized).catch(() => {});
@@ -92,6 +112,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
 
   // Apply always-on-top on mount and when toggled
   useEffect(() => {
+    if (!appWindow) return;
     appWindow.setAlwaysOnTop(alwaysOnTop).catch(() => {});
   }, [alwaysOnTop]);
 
@@ -248,6 +269,35 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
           </div>
         )}
       </div>
+      {isCollapsed && onBrandSwitch && (
+        <div className="titlebar-modes">
+          {modeTabs.map(tab => {
+            const locked = tab.pro && !isPro;
+            const isActive = brandMode === tab.mode;
+            return (
+              <GlassIconButton
+                key={tab.mode}
+                color={tab.color}
+                icon={locked ? '🔒' : tab.icon}
+                active={isActive}
+                className={`titlebar-mode-glass ${locked ? 'locked' : ''}`}
+                onClick={async () => {
+                  if (locked) return;
+                  onBrandSwitch(tab.mode);
+                  // Agrandir la fenêtre après avoir changé de mode
+                  try {
+                    await invoke('expand_window');
+                    onToggleCollapse();
+                  } catch (err) {
+                    console.error('[TitleBar] expand error:', err);
+                  }
+                }}
+                title={locked ? `${tab.label} (Pro)` : `${tab.label} (Ctrl+${tab.shortcut})`}
+              />
+            );
+          })}
+        </div>
+      )}
       {isCollapsed && (
         <div className="titlebar-info" data-tauri-drag-region>
           {weather && (
@@ -288,7 +338,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
           <>
             <button
               className="titlebar-btn titlebar-btn-close"
-              onClick={() => appWindow.close()}
+              onClick={() => appWindow?.close()}
               title="Fermer"
             >
               <svg width="10" height="10" viewBox="0 0 10 10">
@@ -298,7 +348,7 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
             </button>
             <button
               className="titlebar-btn titlebar-btn-maximize"
-              onClick={() => appWindow.toggleMaximize()}
+              onClick={() => appWindow?.toggleMaximize()}
               title={isMaximized ? 'Restaurer' : 'Agrandir'}
             >
               {isMaximized ? (
@@ -350,19 +400,27 @@ export function TitleBar({ isCollapsed, onToggleCollapse, unreadCount = 0, favor
             </svg>
           </button>
         )}
-        <button
-          className="titlebar-btn titlebar-btn-collapse"
-          onClick={handleCollapse}
-          title={isCollapsed ? 'Agrandir la fenêtre' : 'Réduire en barre'}
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            {isCollapsed ? (
+        {isCollapsed ? (
+          <button
+            className="titlebar-btn titlebar-btn-collapse"
+            onClick={handleCollapse}
+            title="Agrandir la fenêtre"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10">
               <polyline points="1,3 5,8 9,3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
+            </svg>
+          </button>
+        ) : (
+          <button
+            className="titlebar-btn titlebar-btn-collapse"
+            onClick={handleCollapse}
+            title="Réduire en barre"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10">
               <polyline points="1,7 5,2 9,7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            )}
-          </svg>
-        </button>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );

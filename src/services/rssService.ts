@@ -18,6 +18,7 @@ interface RSSItem {
   author?: string;
   content?: string;
   guid?: string;
+  commentsUrl?: string;
   enclosure?: { url: string; type: string; length: number };
   duration?: number;
   thumbnail?: string;
@@ -124,6 +125,7 @@ function parseRSSFeed(xml: Document): RSSChannel {
       author: getTextContent(item, 'author') || getTextContent(item, 'dc\\:creator'),
       content: extractContent(item),
       guid: getTextContent(item, 'guid') || getTextContent(item, 'link'),
+      commentsUrl: getTextContent(item, 'comments') || undefined,
       enclosure,
       duration: itunes.duration,
       thumbnail: itunes.thumbnail,
@@ -341,6 +343,92 @@ function resolveRedditRSS(url: string): string {
   }
 }
 
+/** Normalize blog platform URLs to their RSS feed endpoints */
+function resolveBlogPlatformRSS(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname;
+
+    // Substack: *.substack.com → /feed
+    if (host.endsWith('.substack.com') && path !== '/feed' && path !== '/feed/') {
+      parsed.pathname = '/feed';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    // Medium: medium.com/@user/... → /feed/@user, user.medium.com/... → /feed
+    if (host === 'medium.com') {
+      const userMatch = path.match(/^\/@([\w-]+)/);
+      if (userMatch && !path.startsWith('/feed')) {
+        parsed.pathname = `/feed/@${userMatch[1]}`;
+        parsed.search = '';
+        return parsed.toString();
+      }
+      const pubMatch = path.match(/^\/([\w-]+)/);
+      if (pubMatch && !path.startsWith('/feed') && pubMatch[1] !== 'feed') {
+        parsed.pathname = `/feed/${pubMatch[1]}`;
+        parsed.search = '';
+        return parsed.toString();
+      }
+    }
+    if (host.endsWith('.medium.com') && path !== '/feed' && path !== '/feed/') {
+      parsed.pathname = '/feed';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    // Blogger: *.blogspot.com → /feeds/posts/default?alt=rss
+    if (host.endsWith('.blogspot.com') && !path.startsWith('/feeds/')) {
+      parsed.pathname = '/feeds/posts/default';
+      parsed.search = 'alt=rss';
+      return parsed.toString();
+    }
+
+    // Tumblr: *.tumblr.com → /rss
+    if (host.endsWith('.tumblr.com') && path !== '/rss' && path !== '/rss/') {
+      parsed.pathname = '/rss';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    // Hashnode: *.hashnode.dev → /rss.xml
+    if (host.endsWith('.hashnode.dev') && path !== '/rss.xml') {
+      parsed.pathname = '/rss.xml';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    // DEV.to: dev.to/@?user → /feed/user
+    if (host === 'dev.to' && !path.startsWith('/feed')) {
+      const devMatch = path.match(/^\/@?([\w-]+)/);
+      if (devMatch && !['search', 'settings', 'enter', 'top'].includes(devMatch[1])) {
+        parsed.pathname = `/feed/${devMatch[1]}`;
+        parsed.search = '';
+        return parsed.toString();
+      }
+    }
+
+    // WordPress.com: *.wordpress.com → /feed/
+    if (host.endsWith('.wordpress.com') && path !== '/feed' && path !== '/feed/') {
+      parsed.pathname = '/feed/';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    // Ghost.io: *.ghost.io → /rss/
+    if (host.endsWith('.ghost.io') && path !== '/rss' && path !== '/rss/') {
+      parsed.pathname = '/rss/';
+      parsed.search = '';
+      return parsed.toString();
+    }
+
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 export async function fetchFeed(url: string): Promise<RSSChannel> {
   // Twitter: use Syndication API
   const twitterUser = extractTwitterUsername(url);
@@ -350,6 +438,8 @@ export async function fetchFeed(url: string): Promise<RSSChannel> {
 
   // Reddit: use old.reddit.com + .rss for reliability
   let resolvedUrl = resolveRedditRSS(url);
+  // Blog platforms: normalize to RSS feed endpoints
+  resolvedUrl = resolveBlogPlatformRSS(resolvedUrl);
   resolvedUrl = await resolveYouTubeRSS(resolvedUrl);
   const text = await fetchViaBackend(resolvedUrl);
 
@@ -389,26 +479,35 @@ export async function fetchAndParseFeed(
 
   return channel.items
     .filter(item => !existingItemIds.has(item.guid || item.link))
-    .map((item, idx) => ({
-      id: `${feed.id}-${item.guid || item.link || idx}`,
-      feedId: feed.id,
-      title: item.title || 'Sans titre',
-      excerpt: item.description?.replace(/<[^>]*>/g, '').slice(0, 200) || '',
-      content: item.content || item.description || '',
-      author: item.author || feed.name,
-      publishedAt: parseRSSDate(item.pubDate || ''),
-      readTime: estimateReadTime(item.content || item.description || ''),
-      thumbnail: item.thumbnail,
-      url: item.link || feed.url,
-      isRead: false,
-      isStarred: false,
-      isBookmarked: false,
-      source: effectiveSource,
-      feedName: feed.name,
-      enclosureUrl: item.enclosure?.url,
-      enclosureType: item.enclosure?.type,
-      duration: item.duration,
-    }));
+    .map((item, idx) => {
+      // For Reddit, derive commentsUrl from <comments> element or from GUID (always a permalink)
+      let commentsUrl: string | undefined = item.commentsUrl;
+      if (!commentsUrl && effectiveSource === 'reddit' && item.guid?.includes('/comments/')) {
+        commentsUrl = item.guid;
+      }
+
+      return {
+        id: `${feed.id}-${item.guid || item.link || idx}`,
+        feedId: feed.id,
+        title: item.title || 'Sans titre',
+        excerpt: item.description?.replace(/<[^>]*>/g, '').slice(0, 200) || '',
+        content: item.content || item.description || '',
+        author: item.author || feed.name,
+        publishedAt: parseRSSDate(item.pubDate || ''),
+        readTime: estimateReadTime(item.content || item.description || ''),
+        thumbnail: item.thumbnail,
+        url: item.link || feed.url,
+        isRead: false,
+        isStarred: false,
+        isBookmarked: false,
+        source: effectiveSource,
+        feedName: feed.name,
+        commentsUrl,
+        enclosureUrl: item.enclosure?.url,
+        enclosureType: item.enclosure?.type,
+        duration: item.duration,
+      };
+    });
 }
 
 export async function discoverFeedInfo(url: string): Promise<{ name: string; description: string } | null> {

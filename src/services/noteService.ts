@@ -1,5 +1,11 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+// Storage mode guard: skip Supabase calls when user chose local-only storage
+const STORAGE_MODE_KEY = 'superflux_storage_mode';
+function isLocalMode(): boolean {
+  return localStorage.getItem(STORAGE_MODE_KEY) === 'local';
+}
+
 export interface NoteRow {
   id: string;
   title: string;
@@ -17,6 +23,7 @@ export interface NoteRow {
 }
 
 export async function fetchNotes(userId: string): Promise<NoteRow[]> {
+  if (isLocalMode()) return [];
   console.log('[notes] isSupabaseConfigured:', isSupabaseConfigured, 'userId:', userId);
   if (!isSupabaseConfigured) { console.warn('[notes] Supabase not configured'); return []; }
 
@@ -52,6 +59,7 @@ export async function upsertNote(
     sticky_height?: number | null;
   }
 ): Promise<NoteRow | null> {
+  if (isLocalMode()) return null;
   if (!isSupabaseConfigured) return null;
 
   const { data, error } = await supabase
@@ -82,6 +90,7 @@ export async function upsertNote(
 }
 
 export async function removeNote(userId: string, noteId: string): Promise<boolean> {
+  if (isLocalMode()) return true;
   if (!isSupabaseConfigured) return false;
 
   const { error } = await supabase
@@ -103,6 +112,7 @@ export async function updateNoteContent(
   noteId: string,
   content: string
 ): Promise<boolean> {
+  if (isLocalMode()) return true;
   if (!isSupabaseConfigured) return false;
 
   const { error } = await supabase
@@ -134,6 +144,7 @@ export async function updateNoteMeta(
     sticky_height?: number | null;
   }
 ): Promise<boolean> {
+  if (isLocalMode()) return true;
   if (!isSupabaseConfigured) return false;
 
   const { error } = await supabase

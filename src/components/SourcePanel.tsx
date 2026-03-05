@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from "motion/react";
 import type { Feed, FeedCategory, FeedItem, FeedSource } from "../types";
 import { SyncButton } from "./SyncButton";
@@ -16,11 +17,55 @@ import { EditorFileList } from "./EditorFileList";
 import { NoteSourceList } from "./NoteSourceList";
 import { BookmarkSourceList } from "./BookmarkSourceList";
 import { DrawFileList } from "./DrawFileList";
+import { ExpanderFileList } from "./ExpanderFileList";
+import { ClipboardSettingsPanel } from "./ClipboardSettingsPanel";
 import type { Note } from "./NotePanel";
 import { PalettePicker } from "./PalettePicker";
 import { getStoredPaletteId, getPaletteById } from "../themes/palettes";
 import ShinyText from "./ShinyText";
 import GlassIconButton from "./GlassIconButton";
+import { isPwSyncEnabled, setPwSyncEnabled, getLastPwSync } from "../services/passwordSyncService";
+
+function PasswordSyncPanel() {
+  const [enabled, setEnabled] = useState(isPwSyncEnabled());
+  const [lastSync, setLastSync] = useState(getLastPwSync());
+
+  const toggle = useCallback(() => {
+    const next = !enabled;
+    setPwSyncEnabled(next);
+    setEnabled(next);
+    if (next) {
+      // Dispatch custom event so SuperPassword can trigger an immediate upload
+      window.dispatchEvent(new CustomEvent('pw-sync-toggled', { detail: { enabled: true } }));
+    }
+  }, [enabled]);
+
+  // Listen for sync updates
+  useEffect(() => {
+    const handler = () => setLastSync(getLastPwSync());
+    window.addEventListener('pw-sync-done', handler);
+    return () => window.removeEventListener('pw-sync-done', handler);
+  }, []);
+
+  return (
+    <div className="pw-sync-section">
+      <div className="pw-sync-toggle">
+        <label onClick={toggle}>Synchroniser le coffre</label>
+        <div
+          className={`pw-sync-slider ${enabled ? 'active' : ''}`}
+          onClick={toggle}
+          role="switch"
+          aria-checked={enabled}
+        />
+      </div>
+      {lastSync && (
+        <div className="pw-sync-status">
+          Dernière sync : {new Date(lastSync).toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface SourcePanelProps {
   categories: FeedCategory[];
@@ -48,10 +93,11 @@ interface SourcePanelProps {
   onRenameFolder: (categoryId: string, oldPath: string, newName: string) => void;
   onDeleteFolder: (categoryId: string, path: string) => void;
   onMoveFeedToFolder: (feedId: string, folder: string | undefined) => void;
+  onToggleNotify?: (feedId: string) => void;
   onClose?: () => void;
-  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw';
+  brandMode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown';
   onToggleBrand: () => void;
-  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw') => void;
+  onBrandSwitch?: (mode: 'flux' | 'note' | 'bookmark' | 'editor' | 'draw' | 'translate' | 'expander' | 'clipboard' | 'password' | 'markdown') => void;
   onSyncIntervalChange?: (interval: number) => void;
   onShowSysInfoChange?: (show: boolean) => void;
   showSysInfo?: boolean;
@@ -114,6 +160,66 @@ interface SourcePanelProps {
   onRenameDrawFolder?: (oldName: string, newName: string) => void;
   onDeleteDrawFolder?: (name: string) => void;
   onMoveDrawToFolder?: (docId: string, folder: string | undefined) => void;
+  // Expander mode props
+  snippets?: import('./ExpanderFileList').Snippet[];
+  selectedSnippetId?: string | null;
+  onSelectSnippet?: (id: string) => void;
+  onAddSnippet?: () => void;
+  onDeleteSnippet?: (id: string) => void;
+  onCopySnippet?: (id: string) => void;
+  // Clipboard mode props
+  clipEntries?: import('./ClipboardHistoryList').ClipEntry[];
+  selectedClipId?: string | null;
+  onSelectClip?: (id: string) => void;
+  onPasteClip?: (id: string) => void;
+  onDeleteClip?: (id: string) => void;
+  onTogglePinClip?: (id: string) => void;
+}
+
+const MD_VAULT_PATH_KEY = 'supermarkdown_vault_path';
+
+function MarkdownVaultButton() {
+  const [vaultPath, setVaultPath] = useState<string | null>(() => localStorage.getItem(MD_VAULT_PATH_KEY));
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent<string>).detail;
+      setVaultPath(path);
+    };
+    window.addEventListener('vault-changed', handler);
+    return () => window.removeEventListener('vault-changed', handler);
+  }, []);
+
+  const handleOpen = useCallback(async () => {
+    try {
+      const selected = await invoke<string | null>('md_pick_folder');
+      if (selected) {
+        localStorage.setItem(MD_VAULT_PATH_KEY, selected);
+        setVaultPath(selected);
+        window.dispatchEvent(new CustomEvent('vault-changed', { detail: selected }));
+      }
+    } catch (e) {
+      console.error('Folder picker failed:', e);
+    }
+  }, []);
+
+  const vaultName = vaultPath?.split(/[/\\]/).pop() || null;
+
+  return (
+    <div style={{ padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <button
+        className="source-all-btn"
+        onClick={handleOpen}
+        title={vaultPath || 'Open Vault'}
+        style={{ gap: 8 }}
+      >
+        <span className="source-all-icon">📂</span>
+        <span className="source-all-label" style={{ flex: 1, textAlign: 'left' }}>
+          {vaultName || 'Open Vault'}
+        </span>
+      </button>
+    </div>
+  );
 }
 
 const sourceIcons: Record<string, string> = {
@@ -253,6 +359,7 @@ export function SourcePanel({
   onMoveDocToFolder,
   onAddBookmark,
   onReorderFeed,
+  onToggleNotify,
   bookmarkFolders,
   bookmarkFolderCounts,
   selectedBookmarkFolder,
@@ -278,6 +385,18 @@ export function SourcePanel({
   onRenameDrawFolder,
   onDeleteDrawFolder,
   onMoveDrawToFolder,
+  snippets = [],
+  selectedSnippetId = null,
+  onSelectSnippet,
+  onAddSnippet,
+  onDeleteSnippet,
+  onCopySnippet,
+  clipEntries = [],
+  selectedClipId,
+  onSelectClip,
+  onPasteClip,
+  onDeleteClip,
+  onTogglePinClip,
 }: SourcePanelProps) {
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -544,6 +663,9 @@ export function SourcePanel({
         {feed.unreadCount > 0 && (
           <span className="feed-unread">{feed.unreadCount}</span>
         )}
+        {feed.notifyOnNew && (
+          <span className="feed-notify-badge" title="Notifications activées">🔔</span>
+        )}
         {isRSSHubUrl(feed.url) && (
           <span className="feed-rsshub-badge" title="Via RSSHub">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
@@ -676,7 +798,7 @@ export function SourcePanel({
           <span className="brand-icon">◈</span>
           <button className="brand-name-btn" onClick={onToggleBrand}>
             <ShinyText
-              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : 'SuperBookmark'}
+              text={brandMode === 'flux' ? 'SuperFlux' : brandMode === 'note' ? 'SuperNote' : brandMode === 'editor' ? 'SuperEditor' : brandMode === 'draw' ? 'SuperDraw' : brandMode === 'translate' ? 'SuperTranslate' : brandMode === 'expander' ? 'SuperExpander' : brandMode === 'clipboard' ? 'SuperClipboard' : brandMode === 'password' ? 'SuperPassword' : brandMode === 'markdown' ? 'SuperMarkdown' : 'SuperBookmark'}
               speed={2}
               delay={0}
               color="#787878"
@@ -747,6 +869,19 @@ export function SourcePanel({
             onSelectBookmark={onSelectBookmark}
             totalCount={bookmarkTotalCount}
           />
+        ) : brandMode === 'translate' ? (
+          <div className="panel-empty-note" style={{ padding: '24px', opacity: 0.5, textAlign: 'center' }}>🌐 SuperTranslate</div>
+        ) : brandMode === 'expander' ? (
+          <ExpanderFileList
+            snippets={snippets}
+            selectedSnippetId={selectedSnippetId}
+            searchQuery={searchQuery}
+            onSelectSnippet={onSelectSnippet ?? (() => {})}
+            onDeleteSnippet={onDeleteSnippet ?? (() => {})}
+            onCopySnippet={onCopySnippet ?? (() => {})}
+          />
+        ) : brandMode === 'clipboard' ? (
+          <ClipboardSettingsPanel />
         ) : brandMode === 'draw' ? (
           <DrawFileList
             docs={drawDocs}
@@ -763,6 +898,10 @@ export function SourcePanel({
             onDeleteFolder={onDeleteDrawFolder ?? (() => {})}
             onMoveDocToFolder={onMoveDrawToFolder ?? (() => {})}
           />
+        ) : brandMode === 'password' ? (
+          <PasswordSyncPanel />
+        ) : brandMode === 'markdown' ? (
+          <MarkdownVaultButton />
         ) : (
         <>
         <button
@@ -885,10 +1024,15 @@ export function SourcePanel({
         <div className="mode-tab-bar">
           {([
             { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false, color: 'blue' },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'green' },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'orange' },
+            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'orange' },
+            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'green' },
             { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'indigo' },
+            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'red' },
+            { mode: 'translate' as const, icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'indigo' },
+            { mode: 'expander' as const, icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
+            { mode: 'clipboard' as const, icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
+            { mode: 'password' as const, icon: '🔐', label: 'Password', shortcut: '9', pro: true, color: 'rose' },
+            { mode: 'markdown' as const, icon: '📓', label: 'Markdown', shortcut: '0', pro: true, color: 'sky' },
           ]).map(tab => {
             const locked = tab.pro && !isPro;
             return (
@@ -972,6 +1116,8 @@ export function SourcePanel({
             brandMode === 'flux' ? 'Ajouter un flux' :
             brandMode === 'note' ? 'Nouvelle note' :
             brandMode === 'editor' ? 'Nouveau document' :
+            brandMode === 'expander' ? 'Nouveau snippet' :
+            brandMode === 'clipboard' ? 'Clipboard' :
             'Ajouter un bookmark'
           }
           onClick={() => {
@@ -985,6 +1131,8 @@ export function SourcePanel({
               onAddNote?.();
             } else if (brandMode === 'editor') {
               onAddDoc?.();
+            } else if (brandMode === 'expander') {
+              onAddSnippet?.();
             } else if (brandMode === 'bookmark') {
               setBookmarkUrlOpen(prev => !prev);
               setTimeout(() => bookmarkUrlRef.current?.focus(), 50);
@@ -1268,6 +1416,16 @@ export function SourcePanel({
             >
               <span className="feed-context-menu-icon">✎</span>
               Renommer
+            </button>
+            <button
+              className="feed-context-menu-item"
+              onClick={() => {
+                onToggleNotify?.(contextMenu.feed.id);
+                setContextMenu(null);
+              }}
+            >
+              <span className="feed-context-menu-icon">{contextMenu.feed.notifyOnNew ? '🔔' : '🔕'}</span>
+              {contextMenu.feed.notifyOnNew ? 'Désactiver notifications' : 'Activer notifications'}
             </button>
             <button
               className="feed-context-menu-item feed-context-menu-item--danger"

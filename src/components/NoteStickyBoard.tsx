@@ -18,6 +18,12 @@ const STICKY_COLORS: Record<string, { bg: string; shadow: string; tape: string }
   green:  { bg: '#dcfce7', shadow: 'rgba(74,180,110,0.25)',  tape: '#bbf7d0' },
   orange: { bg: '#ffedd5', shadow: 'rgba(220,160,80,0.25)',  tape: '#fed7aa' },
   purple: { bg: '#f3e8ff', shadow: 'rgba(160,110,220,0.25)', tape: '#e9d5ff' },
+  red:    { bg: '#fee2e2', shadow: 'rgba(220,90,90,0.25)',   tape: '#fecaca' },
+  teal:   { bg: '#ccfbf1', shadow: 'rgba(60,180,170,0.25)',  tape: '#99f6e4' },
+  indigo: { bg: '#e0e7ff', shadow: 'rgba(110,100,220,0.25)', tape: '#c7d2fe' },
+  amber:  { bg: '#fef3c7', shadow: 'rgba(210,170,50,0.25)',  tape: '#fde68a' },
+  lime:   { bg: '#ecfccb', shadow: 'rgba(130,190,50,0.25)',  tape: '#d9f99d' },
+  sky:    { bg: '#e0f2fe', shadow: 'rgba(56,160,220,0.25)',  tape: '#bae6fd' },
 };
 
 const COLOR_SWATCHES = [
@@ -27,6 +33,12 @@ const COLOR_SWATCHES = [
   { id: 'green',  swatch: '#dcfce7', ring: '#4ade80' },
   { id: 'orange', swatch: '#ffedd5', ring: '#fb923c' },
   { id: 'purple', swatch: '#f3e8ff', ring: '#c084fc' },
+  { id: 'red',    swatch: '#fee2e2', ring: '#f87171' },
+  { id: 'teal',   swatch: '#ccfbf1', ring: '#2dd4bf' },
+  { id: 'indigo', swatch: '#e0e7ff', ring: '#818cf8' },
+  { id: 'amber',  swatch: '#fef3c7', ring: '#fbbf24' },
+  { id: 'lime',   swatch: '#ecfccb', ring: '#a3e635' },
+  { id: 'sky',    swatch: '#e0f2fe', ring: '#38bdf8' },
 ];
 
 function randomRotation() {

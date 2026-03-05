@@ -72,10 +72,11 @@ export function UpgradeModal() {
                   Débloquez tout le potentiel de Superflux avec une licence Pro :
                 </p>
                 <ul style={{ margin: '12px 0', paddingLeft: 20, lineHeight: 1.8 }}>
+                  <li>Plus de 10 flux RSS</li>
+                  <li>Plus de 5 dossiers</li>
                   <li>Résumés IA illimités</li>
                   <li>Surlignage et notes sur les articles</li>
-                  <li>Plus de 50 flux RSS</li>
-                  <li>Plus de 10 dossiers</li>
+                  <li>SuperEditor, SuperDraw, SuperPassword, SuperMarkdown</li>
                   <li>Accès anticipé aux nouvelles fonctionnalités</li>
                 </ul>
 
@@ -84,26 +85,7 @@ export function UpgradeModal() {
                   style={{ width: '100%', marginBottom: 10, position: 'relative' }}
                   onClick={() => openExternal(LEMONSQUEEZY_CHECKOUT_URL)}
                 >
-                  <span>Acheter une licence Pro — 4,99 €</span>
-                  <span style={{
-                    textDecoration: 'line-through',
-                    opacity: 0.6,
-                    marginLeft: 8,
-                    fontSize: '0.85em',
-                  }}>
-                    9,99 €
-                  </span>
-                  <span style={{
-                    background: '#ef4444',
-                    color: '#fff',
-                    fontSize: '0.7em',
-                    fontWeight: 700,
-                    padding: '2px 6px',
-                    borderRadius: 4,
-                    marginLeft: 8,
-                  }}>
-                    -50%
-                  </span>
+                  <span>Acheter une licence Pro — 9,99 €</span>
                 </button>
 
                 <button
