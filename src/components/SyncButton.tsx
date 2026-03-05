@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
 import type { CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SyncButtonProps {
   className?: string;
@@ -18,6 +19,7 @@ export function SyncButton({
   isSyncing = false,
   progress = 0,
 }: SyncButtonProps) {
+  const { t } = useTranslation();
   const handleClick = () => {
     if (!isSyncing && onSync) {
       onSync();
@@ -30,8 +32,8 @@ export function SyncButton({
   };
 
   const getButtonTitle = () => {
-    if (isSyncing) return `Synchronisation... ${Math.round(progress)}%`;
-    return 'Synchroniser les flux';
+    if (isSyncing) return t('sync.syncing', { progress: Math.round(progress) });
+    return t('sync.syncFeeds');
   };
 
   return (

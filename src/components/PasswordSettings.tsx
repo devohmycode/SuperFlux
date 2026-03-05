@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Check, Eye, EyeOff } from 'lucide-react';
 import { Button } from './ui/button';
@@ -12,6 +13,7 @@ interface PasswordSettingsProps {
 }
 
 export function PasswordSettings({ onClose, settings, onSave }: PasswordSettingsProps) {
+  const { t } = useTranslation();
   const [localSettings, setLocalSettings] = useState<VaultSettings>({ ...settings });
   const [saved, setSaved] = useState(false);
 
@@ -36,11 +38,11 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
     setPwSuccess(false);
 
     if (newPw.length < 8) {
-      setPwError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+      setPwError(t('password.minPasswordLength'));
       return;
     }
     if (newPw !== confirmPw) {
-      setPwError('Les mots de passe ne correspondent pas.');
+      setPwError(t('password.passwordsDoNotMatch'));
       return;
     }
 
@@ -55,7 +57,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
       setNewPw('');
       setConfirmPw('');
     } catch (err) {
-      setPwError(typeof err === 'string' ? err : 'Mot de passe actuel incorrect.');
+      setPwError(typeof err === 'string' ? err : t('password.currentPasswordIncorrect'));
     } finally {
       setPwLoading(false);
     }
@@ -69,7 +71,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
-        <h2 className="text-sm font-semibold text-[var(--text-primary)]">Paramètres du coffre-fort</h2>
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('password.vaultSettings')}</h2>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X size={16} />
         </Button>
@@ -81,10 +83,10 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--text-secondary)]">
-              Verrouillage automatique
+              {t('password.autoLock')}
             </label>
             <span className="text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded">
-              {localSettings.auto_lock_minutes === 0 ? 'Désactivé' : `${localSettings.auto_lock_minutes} min`}
+              {localSettings.auto_lock_minutes === 0 ? t('settings.disabled') : `${localSettings.auto_lock_minutes} min`}
             </span>
           </div>
           <input
@@ -96,7 +98,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
             className="w-full accent-[var(--accent)]"
           />
           <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]">
-            <span>Désactivé</span>
+            <span>{t('settings.disabled')}</span>
             <span>60 min</span>
           </div>
         </div>
@@ -105,7 +107,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--text-secondary)]">
-              Effacer le presse-papier
+              {t('password.clearClipboard')}
             </label>
             <span className="text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded">
               {localSettings.clipboard_clear_seconds}s
@@ -130,7 +132,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--text-secondary)]">
-              Longueur par défaut des mots de passe
+              {t('password.defaultPasswordLength')}
             </label>
             <span className="text-xs font-mono text-[var(--text-primary)] bg-[var(--bg-elevated)] px-2 py-0.5 rounded">
               {localSettings.default_password_length}
@@ -152,7 +154,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
 
         {/* Save settings */}
         <Button className="w-full gap-2" onClick={handleSave}>
-          {saved ? <><Check size={14} /> Enregistré</> : 'Enregistrer les paramètres'}
+          {saved ? <><Check size={14} /> {t('password.saved')}</> : t('password.saveSettings')}
         </Button>
 
         {/* Divider */}
@@ -161,7 +163,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
         {/* Change master password */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-            Changer le mot de passe maître
+            {t('password.changeMasterPassword')}
           </h3>
 
           <div className="space-y-2">
@@ -174,7 +176,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
                   'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                   'placeholder:text-[var(--text-tertiary)]',
                 )}
-                placeholder="Mot de passe actuel"
+                placeholder={t('password.currentPassword')}
                 value={currentPw}
                 onChange={(e) => setCurrentPw(e.target.value)}
               />
@@ -197,7 +199,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
                   'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                   'placeholder:text-[var(--text-tertiary)]',
                 )}
-                placeholder="Nouveau mot de passe"
+                placeholder={t('password.newPassword')}
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
               />
@@ -219,14 +221,14 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
                 'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                 'placeholder:text-[var(--text-tertiary)]',
               )}
-              placeholder="Confirmer le nouveau mot de passe"
+              placeholder={t('password.confirmNewPassword')}
               value={confirmPw}
               onChange={(e) => setConfirmPw(e.target.value)}
             />
           </div>
 
           {pwError && <p className="text-xs text-red-500 bg-red-500/10 rounded-lg px-3 py-2">{pwError}</p>}
-          {pwSuccess && <p className="text-xs text-green-500 bg-green-500/10 rounded-lg px-3 py-2">Mot de passe maître modifié avec succès.</p>}
+          {pwSuccess && <p className="text-xs text-green-500 bg-green-500/10 rounded-lg px-3 py-2">{t('password.masterPasswordChanged')}</p>}
 
           <Button
             variant="outline"
@@ -234,7 +236,7 @@ export function PasswordSettings({ onClose, settings, onSave }: PasswordSettings
             onClick={handleChangePassword}
             disabled={pwLoading || !currentPw || !newPw || !confirmPw}
           >
-            {pwLoading ? 'Modification...' : 'Changer le mot de passe'}
+            {pwLoading ? t('password.changing') : t('password.changePassword')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 
 interface ClipboardSettings {
@@ -18,13 +19,13 @@ const MAX_OPTIONS = [
 ];
 
 const RETENTION_OPTIONS = [
-  { value: 0, label: 'Illimité' },
-  { value: 1 * 60 * 60 * 1000, label: '1 heure' },
-  { value: 6 * 60 * 60 * 1000, label: '6 heures' },
-  { value: 24 * 60 * 60 * 1000, label: '24 heures' },
-  { value: 3 * 24 * 60 * 60 * 1000, label: '3 jours' },
-  { value: 7 * 24 * 60 * 60 * 1000, label: '7 jours' },
-  { value: 30 * 24 * 60 * 60 * 1000, label: '30 jours' },
+  { value: 0, labelKey: 'clipboard.unlimited' },
+  { value: 1 * 60 * 60 * 1000, labelKey: 'clipboard.oneHour' },
+  { value: 6 * 60 * 60 * 1000, labelKey: 'clipboard.sixHours' },
+  { value: 24 * 60 * 60 * 1000, labelKey: 'clipboard.twentyFourHours' },
+  { value: 3 * 24 * 60 * 60 * 1000, labelKey: 'clipboard.threeDays' },
+  { value: 7 * 24 * 60 * 60 * 1000, labelKey: 'clipboard.sevenDays' },
+  { value: 30 * 24 * 60 * 60 * 1000, labelKey: 'clipboard.thirtyDays' },
 ];
 
 export type ClipClickAction = 'copy' | 'paste';
@@ -37,6 +38,7 @@ export function getClipClickAction(): ClipClickAction {
 }
 
 export function ClipboardSettingsPanel() {
+  const { t } = useTranslation();
   const [maxEntries, setMaxEntries] = useState(200);
   const [retentionMs, setRetentionMs] = useState(0);
   const [clickAction, setClickAction] = useState<ClipClickAction>(getClipClickAction);
@@ -72,8 +74,8 @@ export function ClipboardSettingsPanel() {
   return (
     <div className="clip-settings-panel">
       <div className="clip-settings-section">
-        <div className="clip-settings-label">Nombre max. d'éléments</div>
-        <div className="clip-settings-desc">Limite d'éléments conservés en mémoire. Les plus anciens (non épinglés) seront supprimés.</div>
+        <div className="clip-settings-label">{t('clipboard.maxItems')}</div>
+        <div className="clip-settings-desc">{t('clipboard.maxItemsDesc')}</div>
         <div className="clip-settings-options">
           {MAX_OPTIONS.map(o => (
             <button
@@ -88,8 +90,8 @@ export function ClipboardSettingsPanel() {
       </div>
 
       <div className="clip-settings-section">
-        <div className="clip-settings-label">Durée de rétention</div>
-        <div className="clip-settings-desc">Les éléments plus anciens que cette durée seront automatiquement supprimés.</div>
+        <div className="clip-settings-label">{t('clipboard.retention')}</div>
+        <div className="clip-settings-desc">{t('clipboard.retentionDesc')}</div>
         <div className="clip-settings-options">
           {RETENTION_OPTIONS.map(o => (
             <button
@@ -97,27 +99,27 @@ export function ClipboardSettingsPanel() {
               className={`clip-settings-chip ${retentionMs === o.value ? 'clip-settings-chip--active' : ''}`}
               onClick={() => handleRetentionChange(o.value)}
             >
-              {o.label}
+              {t(o.labelKey)}
             </button>
           ))}
         </div>
       </div>
 
       <div className="clip-settings-section">
-        <div className="clip-settings-label">Action au clic</div>
-        <div className="clip-settings-desc">Comportement quand vous cliquez sur un élément de la liste.</div>
+        <div className="clip-settings-label">{t('clipboard.clickAction')}</div>
+        <div className="clip-settings-desc">{t('clipboard.clickActionDesc')}</div>
         <div className="clip-settings-options">
           <button
             className={`clip-settings-chip ${clickAction === 'copy' ? 'clip-settings-chip--active' : ''}`}
             onClick={() => handleClickAction('copy')}
           >
-            Copier dans le presse-papier
+            {t('clipboard.copyToClipboard')}
           </button>
           <button
             className={`clip-settings-chip ${clickAction === 'paste' ? 'clip-settings-chip--active' : ''}`}
             onClick={() => handleClickAction('paste')}
           >
-            Coller dans l'app active
+            {t('clipboard.pasteInApp')}
           </button>
         </div>
       </div>

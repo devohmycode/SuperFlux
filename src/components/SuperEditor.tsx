@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { useTranslation } from 'react-i18next';
 import { EditorContent, useEditor, ReactRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Subscript from '@tiptap/extension-subscript';
@@ -46,6 +47,7 @@ const EmojiList = forwardRef<
   { onKeyDown: (props: { event: KeyboardEvent }) => boolean },
   { items: EmojiItem[]; command: (item: EmojiItem) => void }
 >((props, ref) => {
+  const { t } = useTranslation();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => { setSelectedIndex(0); }, [props.items]);
@@ -72,7 +74,7 @@ const EmojiList = forwardRef<
   if (!props.items.length) {
     return (
       <div className="super-editor-emoji-popup">
-        <span className="super-editor-emoji-empty">Aucun emoji</span>
+        <span className="super-editor-emoji-empty">{t('editor.noEmoji')}</span>
       </div>
     );
   }
@@ -154,6 +156,7 @@ function FileMenu({ onNew, onOpen, onDownload, onImport, onExport }: {
   onImport: () => void;
   onExport: (format: 'docx' | 'pdf') => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [exportSub, setExportSub] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -174,25 +177,25 @@ function FileMenu({ onNew, onOpen, onDownload, onImport, onExport }: {
   return (
     <div className="super-editor-filemenu" ref={menuRef}>
       <button className="super-editor-filemenu-trigger" onClick={() => setOpen(o => !o)}>
-        Fichier
+        {t('editor.file')}
         <ChevronDown size={13} />
       </button>
       {open && (
         <div className="super-editor-filemenu-dropdown">
           <button className="super-editor-filemenu-item" onClick={() => { onNew(); setOpen(false); }}>
             <FilePlus size={14} />
-            <span>Nouveau</span>
+            <span>{t('editor.new')}</span>
             <kbd>Ctrl+N</kbd>
           </button>
           <button className="super-editor-filemenu-item" onClick={() => { onOpen(); setOpen(false); }}>
             <FolderOpen size={14} />
-            <span>Ouvrir</span>
+            <span>{t('editor.open')}</span>
             <kbd>Ctrl+O</kbd>
           </button>
           <div className="super-editor-filemenu-divider" />
           <button className="super-editor-filemenu-item" onClick={() => { onImport(); setOpen(false); }}>
             <FileInput size={14} />
-            <span>Importer</span>
+            <span>{t('editor.import')}</span>
             <kbd>.docx .pdf</kbd>
           </button>
           <div
@@ -201,7 +204,7 @@ function FileMenu({ onNew, onOpen, onDownload, onImport, onExport }: {
             onMouseLeave={() => setExportSub(false)}
           >
             <FileOutput size={14} />
-            <span>Exporter</span>
+            <span>{t('editor.export')}</span>
             <ChevronDown size={12} style={{ transform: 'rotate(-90deg)', marginLeft: 'auto' }} />
             {exportSub && (
               <div className="super-editor-filemenu-submenu">
@@ -217,7 +220,7 @@ function FileMenu({ onNew, onOpen, onDownload, onImport, onExport }: {
           <div className="super-editor-filemenu-divider" />
           <button className="super-editor-filemenu-item" onClick={() => { onDownload(); setOpen(false); }}>
             <Download size={14} />
-            <span>Télécharger</span>
+            <span>{t('editor.download')}</span>
             <kbd>Ctrl+S</kbd>
           </button>
         </div>
@@ -236,6 +239,7 @@ interface SuperEditorProps {
 }
 
 export function SuperEditor({ doc, onUpdateContent, onAddDoc }: SuperEditorProps) {
+  const { t } = useTranslation();
   const prevDocIdRef = useRef<string | null>(null);
 
   const editor = useEditor({
@@ -255,7 +259,7 @@ export function SuperEditor({ doc, onUpdateContent, onAddDoc }: SuperEditorProps
       CharacterCount,
       CodeBlockLowlight.configure({ lowlight }),
       Emoji.configure({ emojis: gitHubEmojis, enableEmoticons: true, suggestion: emojiSuggestion }),
-      Placeholder.configure({ placeholder: 'Commencez à écrire...' }),
+      Placeholder.configure({ placeholder: t('editor.startWriting') }),
     ],
     content: doc?.content || '',
     shouldRerenderOnTransaction: true,
@@ -342,7 +346,7 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
       editor.commands.setContent(html);
       if (doc && onUpdateContent) onUpdateContent(doc.id, editor.getHTML());
     } catch (err: any) {
-      setImportError(err?.message || 'Erreur lors de l\'import');
+      setImportError(err?.message || t('editor.importError'));
     }
     e.target.value = '';
   }, [editor, doc, onUpdateContent]);
@@ -361,7 +365,7 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      setImportError(err?.message || 'Erreur lors de l\'export');
+      setImportError(err?.message || t('editor.exportError'));
     }
   }, [editor, doc?.title]);
 
@@ -403,11 +407,11 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
         <div className="super-editor-toolbar-row">
           <FileMenu onNew={handleNew} onOpen={handleOpen} onDownload={handleDownload} onImport={handleImport} onExport={handleExport} />
           <ToolSep />
-          <ToolBtn icon={Bold} label="Gras" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
-          <ToolBtn icon={Italic} label="Italique" active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
-          <ToolBtn icon={UnderlineIcon} label="Souligné" active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />
-          <ToolBtn icon={Strikethrough} label="Barré" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} />
-          <ToolBtn icon={Code} label="Code" active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} />
+          <ToolBtn icon={Bold} label={t('editor.bold')} active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()} />
+          <ToolBtn icon={Italic} label={t('editor.italic')} active={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()} />
+          <ToolBtn icon={UnderlineIcon} label={t('editor.underline')} active={editor.isActive('underline')} onClick={() => editor.chain().focus().toggleUnderline().run()} />
+          <ToolBtn icon={Strikethrough} label={t('editor.strikethrough')} active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()} />
+          <ToolBtn icon={Code} label={t('editor.code')} active={editor.isActive('code')} onClick={() => editor.chain().focus().toggleCode().run()} />
 
           <ToolSep />
 
@@ -418,41 +422,41 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
 
           <ToolSep />
 
-          <ToolBtn icon={AlignLeft} label="Gauche" active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
-          <ToolBtn icon={AlignCenter} label="Centre" active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
-          <ToolBtn icon={AlignRight} label="Droite" active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
-          <ToolBtn icon={AlignJustify} label="Justifié" active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()} />
+          <ToolBtn icon={AlignLeft} label={t('editor.alignLeft')} active={editor.isActive({ textAlign: 'left' })} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
+          <ToolBtn icon={AlignCenter} label={t('editor.alignCenter')} active={editor.isActive({ textAlign: 'center' })} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
+          <ToolBtn icon={AlignRight} label={t('editor.alignRight')} active={editor.isActive({ textAlign: 'right' })} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
+          <ToolBtn icon={AlignJustify} label={t('editor.alignJustify')} active={editor.isActive({ textAlign: 'justify' })} onClick={() => editor.chain().focus().setTextAlign('justify').run()} />
 
           <ToolSep />
 
-          <ToolBtn icon={List} label="Liste à puces" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-          <ToolBtn icon={ListOrdered} label="Liste numérotée" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-          <ToolBtn icon={ListTodo} label="Liste de tâches" active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()} />
-          <ToolBtn icon={Quote} label="Citation" active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-          <ToolBtn icon={FileCode} label="Bloc de code" active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
-          <ToolBtn icon={Minus} label="Séparateur" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+          <ToolBtn icon={List} label={t('editor.bulletList')} active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+          <ToolBtn icon={ListOrdered} label={t('editor.orderedList')} active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+          <ToolBtn icon={ListTodo} label={t('editor.taskList')} active={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()} />
+          <ToolBtn icon={Quote} label={t('editor.blockquote')} active={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+          <ToolBtn icon={FileCode} label={t('editor.codeBlock')} active={editor.isActive('codeBlock')} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
+          <ToolBtn icon={Minus} label={t('editor.separator')} onClick={() => editor.chain().focus().setHorizontalRule().run()} />
 
           <ToolSep />
 
-          <ToolBtn icon={LinkIcon} label="Lien" active={editor.isActive('link')} onClick={() => {
-            const url = window.prompt('URL du lien');
+          <ToolBtn icon={LinkIcon} label={t('editor.link')} active={editor.isActive('link')} onClick={() => {
+            const url = window.prompt(t('editor.linkUrl'));
             if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
           }} />
-          <ToolBtn icon={Unlink} label="Supprimer lien" onClick={() => editor.chain().focus().unsetLink().run()} />
-          <ToolBtn icon={ImageIcon} label="Image" onClick={() => {
-            const url = window.prompt('URL de l\'image');
+          <ToolBtn icon={Unlink} label={t('editor.removeLink')} onClick={() => editor.chain().focus().unsetLink().run()} />
+          <ToolBtn icon={ImageIcon} label={t('editor.image')} onClick={() => {
+            const url = window.prompt(t('editor.imageUrl'));
             if (url) editor.chain().focus().setImage({ src: url }).run();
           }} />
 
           <ToolSep />
 
-          <ToolBtn icon={SubscriptIcon} label="Indice" active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()} />
-          <ToolBtn icon={SuperscriptIcon} label="Exposant" active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
+          <ToolBtn icon={SubscriptIcon} label={t('editor.subscript')} active={editor.isActive('subscript')} onClick={() => editor.chain().focus().toggleSubscript().run()} />
+          <ToolBtn icon={SuperscriptIcon} label={t('editor.superscript')} active={editor.isActive('superscript')} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
 
           <ToolSep />
 
-          <ToolBtn icon={Undo2} label="Annuler" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
-          <ToolBtn icon={Redo2} label="Rétablir" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
+          <ToolBtn icon={Undo2} label={t('common.cancel')} disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} />
+          <ToolBtn icon={Redo2} label={t('editor.redo')} disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} />
         </div>
       </div>
 
@@ -475,8 +479,8 @@ a{color:#3a7ed4}img{max-width:100%;border-radius:8px}</style>
 
       {/* Footer */}
       <div className="super-editor-footer">
-        <span>{chars} caractères</span>
-        <span>{words} mots</span>
+        <span>{chars} {t('editor.characters')}</span>
+        <span>{words} {t('editor.words')}</span>
       </div>
     </div>
   );

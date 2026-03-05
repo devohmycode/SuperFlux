@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { motion, AnimatePresence } from 'motion/react';
 import type { FeedComment, FeedItem, SummaryFormat, TextHighlight, HighlightColor } from '../types';
 import { AudioPlayer } from './AudioPlayer';
@@ -60,7 +62,8 @@ interface ReaderPanelProps {
 }
 
 function formatDate(date: Date): string {
-  return date.toLocaleDateString('fr-FR', {
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+  return date.toLocaleDateString(locale, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -71,7 +74,7 @@ function formatDate(date: Date): string {
 }
 
 function formatCommentCount(count: number): string {
-  return `${count} ${count > 1 ? 'commentaires' : 'commentaire'}`;
+  return i18n.t('common.comments', { count });
 }
 
 function formatCommentTime(date: Date): string {
@@ -81,10 +84,10 @@ function formatCommentTime(date: Date): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "à l'instant";
-  if (diffMins < 60) return `il y a ${diffMins}m`;
-  if (diffHours < 24) return `il y a ${diffHours}h`;
-  return `il y a ${diffDays}j`;
+  if (diffMins < 1) return i18n.t('common.justNow');
+  if (diffMins < 60) return i18n.t('reader.minutesAgo', { count: diffMins });
+  if (diffHours < 24) return i18n.t('reader.hoursAgo', { count: diffHours });
+  return i18n.t('common.daysAgo', { count: diffDays });
 }
 
 function getCommentsUrl(item: FeedItem): string | null {
@@ -239,7 +242,7 @@ function redditMediaToHtml(url: string): string | null {
     if (host === 'v.redd.it') {
       // v.redd.it URLs need /DASH_720.mp4 or similar — use HLS fallback
       const dashUrl = `${url.replace(/\/+$/, '')}/DASH_720.mp4`;
-      return `<figure class="reddit-media"><video controls preload="metadata" style="max-width:100%;border-radius:8px"><source src="${dashUrl}" type="video/mp4" />Votre navigateur ne supporte pas la lecture vidéo. <a href="${url}" target="_blank">Voir la vidéo</a></video></figure>`;
+      return `<figure class="reddit-media"><video controls preload="metadata" style="max-width:100%;border-radius:8px"><source src="${dashUrl}" type="video/mp4" />${i18n.t('reader.videoNotSupported')} <a href="${url}" target="_blank">${i18n.t('reader.watchVideo')}</a></video></figure>`;
     }
   } catch { /* invalid URL */ }
   return null;
@@ -275,6 +278,7 @@ function convertRedditImageLinks(html: string): string {
 const HIGHLIGHT_COLORS: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'orange'];
 
 export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullContentExtracted, breadcrumb, feedPanelOpen, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onCreateNoteFromSelection, onBackToFeeds, onClose, translateActive: translateActiveProp }: ReaderPanelProps) {
+  const { t } = useTranslation();
   const { isPro, showUpgradeModal } = usePro();
   const [viewMode, setViewMode] = useState<ViewMode>('reader');
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>('idle');
@@ -392,7 +396,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       setTranslatedTitle(titleResult);
       setTranslateState('done');
     }).catch((e) => {
-      setTranslateError(e instanceof Error ? e.message : 'Erreur de traduction');
+      setTranslateError(e instanceof Error ? e.message : t('reader.translationError'));
       setTranslateState('error');
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -427,7 +431,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       })
       .catch(err => {
         if (cancelled) return;
-        setFullContentError(err instanceof Error ? err.message : 'Erreur inconnue');
+        setFullContentError(err instanceof Error ? err.message : t('common.unknownError'));
         setFullContentStatus('error');
       });
 
@@ -726,7 +730,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
           status: 'error',
           comments: fallbackComments,
           count: fallbackCount,
-          error: error instanceof Error ? error.message : 'Erreur inconnue',
+          error: error instanceof Error ? error.message : t('common.unknownError'),
         });
       }
     };
@@ -849,7 +853,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       setFullContentStatus('done');
       onFullContentExtractedRef.current?.(item.id, article.content);
     } catch (e) {
-      setFullContentError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setFullContentError(e instanceof Error ? e.message : t('common.unknownError'));
       setFullContentStatus('error');
     }
   }, [item, fullContentStatus]);
@@ -867,7 +871,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
       setSummaryState('done');
       onSummaryGenerated?.(item.id, result);
     } catch (e) {
-      setSummaryError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setSummaryError(e instanceof Error ? e.message : t('common.unknownError'));
       setSummaryState('error');
     }
   }, [item, summaryState, onSummaryGenerated]);
@@ -878,7 +882,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink href="#" onClick={(e) => { e.preventDefault(); breadcrumb.onClickAll(); }}>
-              Tous les flux
+              {t('feedPanel.allFeeds')}
             </BreadcrumbLink>
           </BreadcrumbItem>
           {breadcrumb.sourceName && (
@@ -929,7 +933,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
           <div className="reader-toolbar reader-toolbar--empty">
             <div className="reader-toolbar-left" />
             <div className="reader-toolbar-right">
-              <button className="panel-close-btn" onClick={onClose} title="Replier le panneau Lecture (3)">
+              <button className="panel-close-btn" onClick={onClose} title={t('reader.collapseReaderPanel')}>
                 ✕
               </button>
             </div>
@@ -943,19 +947,19 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
           transition={{ duration: 0.5 }}
         >
           <span className="reader-empty-icon">◈</span>
-          <p className="reader-empty-text">Sélectionnez un article pour commencer la lecture</p>
+          <p className="reader-empty-text">{t('reader.selectArticle')}</p>
           <div className="reader-empty-shortcuts">
             <div className="shortcut-row">
               <kbd>↑</kbd><kbd>↓</kbd>
-              <span>Naviguer</span>
+              <span>{t('reader.navigate')}</span>
             </div>
             <div className="shortcut-row">
               <kbd>↵</kbd>
-              <span>Ouvrir</span>
+              <span>{t('common.open')}</span>
             </div>
             <div className="shortcut-row">
               <kbd>S</kbd>
-              <span>Favoris</span>
+              <span>{t('feedPanel.favorites')}</span>
             </div>
           </div>
         </motion.div>
@@ -970,12 +974,12 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
         <div className="reader-toolbar-left">
           {viewMode === 'web' ? (
             <>
-              <button className="reader-tool-btn back-btn" onClick={handleReaderView} title="Retour au mode lecture">
+              <button className="reader-tool-btn back-btn" onClick={handleReaderView} title={t('reader.backToReader')}>
                 ←
               </button>
 
               {onBackToFeeds && (
-                <button className="reader-tool-btn back-feeds-btn" onClick={() => { handleReaderView(); onBackToFeeds(); }} title="Retour aux flux">
+                <button className="reader-tool-btn back-feeds-btn" onClick={() => { handleReaderView(); onBackToFeeds(); }} title={t('reader.backToFeeds')}>
                   ◈
                 </button>
               )}
@@ -986,14 +990,14 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 <button
                   className="view-mode-btn active"
                   onClick={handleReaderView}
-                  title="Mode lecture"
+                  title={t('bookmarks.readerMode')}
                 >
                   <span className="view-mode-icon">¶</span>
-                  <span className="view-mode-label">Lecture</span>
+                  <span className="view-mode-label">{t('reader.reading')}</span>
                 </button>
                 <button
                   className="view-mode-btn active"
-                  title="Mode web"
+                  title={t('bookmarks.webMode')}
                   disabled
                 >
                   <span className="view-mode-icon">◎</span>
@@ -1003,33 +1007,33 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             </>
           ) : (
             <>
-              <button className="reader-tool-btn" title="Favoris" onClick={onToggleStar}>
+              <button className="reader-tool-btn" title={t('feedPanel.favorites')} onClick={onToggleStar}>
                 <span className={item.isStarred ? 'starred' : ''}>
                   {item.isStarred ? '★' : '☆'}
                 </span>
               </button>
-              <button className="reader-tool-btn" title="Partager">↗</button>
-              <button className="reader-tool-btn" title="Copier le lien">⎘</button>
+              <button className="reader-tool-btn" title={t('reader.share')}>↗</button>
+              <button className="reader-tool-btn" title={t('reader.copyLink')}>⎘</button>
               <button
                 className={`reader-tool-btn summarize ${summaryState === 'loading' ? 'loading' : ''}`}
-                title={isPro ? "Résumer avec l'IA" : "Résumer (Pro)"}
+                title={isPro ? t('reader.summarizeAI') : t('reader.summarizePro')}
                 onClick={isPro ? handleSummarize : showUpgradeModal}
                 disabled={summaryState === 'loading'}
               >
                 {summaryState === 'loading' ? (
                   <span className="btn-spinner" />
                 ) : isPro ? '✦' : '🔒'}
-                <span className="summarize-label">{isPro ? 'Résumer' : 'Résumer (Pro)'}</span>
+                <span className="summarize-label">{isPro ? t('reader.summarize') : t('reader.summarizePro')}</span>
               </button>
               <button
                 className={`reader-tool-btn tts ${ttsStatus !== 'idle' ? 'active' : ''} ${ttsError ? 'error' : ''}`}
-                title={ttsError ? `Erreur: ${ttsError}` : ttsStatus === 'playing' ? 'Pause' : ttsStatus === 'paused' ? 'Reprendre' : 'Écouter'}
+                title={ttsError ? `${t('common.error')}: ${ttsError}` : ttsStatus === 'playing' ? t('reader.pause') : ttsStatus === 'paused' ? t('reader.resume') : t('reader.listen')}
                 onClick={handleTts}
               >
                 {ttsError ? '⚠' : ttsStatus === 'playing' ? '⏸' : '▶'}
               </button>
               {ttsStatus !== 'idle' && (
-                <button className="reader-tool-btn tts-stop" onClick={handleTtsStop} title="Arrêter">
+                <button className="reader-tool-btn tts-stop" onClick={handleTtsStop} title={t('reader.stop')}>
                   ■
                 </button>
               )}
@@ -1037,7 +1041,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               <div style={{ position: 'relative' }}>
                 <button
                   className="reader-tool-btn highlights-btn"
-                  title={isPro ? "Surlignages" : "Surlignages (Pro)"}
+                  title={isPro ? t('bookmarks.highlights') : t('bookmarks.highlightsPro')}
                   onClick={isPro ? () => setHighlightsMenuOpen(prev => !prev) : showUpgradeModal}
                 >
                   {isPro ? (
@@ -1050,14 +1054,14 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 {highlightsMenuOpen && (
                   <div className="highlights-menu-dropdown">
                     <div className="highlights-menu-header">
-                      <span className="highlights-menu-title">Surlignages</span>
+                      <span className="highlights-menu-title">{t('bookmarks.highlights')}</span>
                       {(highlights?.length ?? 0) > 0 && (
                         <span className="highlights-badge">{highlights!.length}</span>
                       )}
                     </div>
                     {(!highlights || highlights.length === 0) ? (
                       <div className="highlights-menu-empty">
-                        Aucun surlignage pour cet article
+                        {t('reader.noHighlightsForArticle')}
                       </div>
                     ) : (
                       <div className="highlights-menu-list">
@@ -1079,7 +1083,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                                   onKeyDown={e => { if (e.key === 'Enter') handleSaveNote(); }}
                                   onBlur={handleSaveNote}
                                   onClick={e => e.stopPropagation()}
-                                  placeholder="Ajouter une note..."
+                                  placeholder={t('bookmarks.addNote')}
                                   autoFocus
                                 />
                               ) : (
@@ -1103,7 +1107,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                             <button
                               className="highlight-menu-remove"
                               onClick={e => { e.stopPropagation(); item && onHighlightRemove?.(item.id, hl.id); }}
-                              title="Supprimer"
+                              title={t('common.delete')}
                             >
                               ×
                             </button>
@@ -1121,16 +1125,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 <button
                   className={`view-mode-btn ${viewMode === 'reader' ? 'active' : ''}`}
                   onClick={handleReaderView}
-                  title="Mode lecture"
+                  title={t('bookmarks.readerMode')}
                 >
                   <span className="view-mode-icon">¶</span>
-                  <span className="view-mode-label">Lecture</span>
+                  <span className="view-mode-label">{t('reader.reading')}</span>
                 </button>
                 <button
                   className={`view-mode-btn ${!hasValidUrl ? 'disabled' : ''}`}
                   onClick={handleWebView}
                   disabled={!hasValidUrl}
-                  title={hasValidUrl ? 'Mode web' : 'URL non disponible'}
+                  title={hasValidUrl ? t('bookmarks.webMode') : t('reader.urlNotAvailable')}
                 >
                   <span className="view-mode-icon">◎</span>
                   <span className="view-mode-label">Web</span>
@@ -1141,15 +1145,15 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
         </div>
         <div className="reader-toolbar-right">
           {viewMode === 'web' && (
-            <button className="reader-tool-btn" onClick={handleRefresh} title="Actualiser">
+            <button className="reader-tool-btn" onClick={handleRefresh} title={t('common.refresh')}>
               ↻
             </button>
           )}
-          <button className="reader-tool-btn" onClick={handleOpenExternal} title="Ouvrir dans le navigateur">
+          <button className="reader-tool-btn" onClick={handleOpenExternal} title={t('bookmarks.openInBrowser')}>
             ⧉
           </button>
           {onClose && (
-            <button className="panel-close-btn" onClick={onClose} title="Replier le panneau Lecture (3)">
+            <button className="panel-close-btn" onClick={onClose} title={t('reader.collapseReaderPanel')}>
               ✕
             </button>
           )}
@@ -1171,7 +1175,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             <button
               className="urlbar-open"
               onClick={handleOpenExternal}
-              title="Ouvrir dans un nouvel onglet"
+              title={t('reader.openInNewTab')}
             >
               ↗
             </button>
@@ -1203,7 +1207,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
               {item.readTime && (
                 <>
                   <span className="reader-meta-dot">·</span>
-                  <span className="reader-readtime">{item.readTime} min de lecture</span>
+                  <span className="reader-readtime">{t('reader.readTime', { count: item.readTime })}</span>
                 </>
               )}
               {item.source === 'reddit' && typeof item.commentCount === 'number' && (
@@ -1246,7 +1250,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                     onClick={() => setSummaryOpen(prev => !prev)}
                   >
                     <span className="reader-summary-icon">✦</span>
-                    <span className="reader-summary-title">Résumé IA</span>
+                    <span className="reader-summary-title">{t('reader.aiSummary')}</span>
                     <span className={`reader-summary-chevron ${summaryOpen ? 'open' : ''}`}>›</span>
                   </button>
                   <AnimatePresence>
@@ -1283,16 +1287,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {fullContentStatus === 'loading' && (
               <div className="reader-fullcontent-banner loading">
                 <span className="btn-spinner" />
-                <span>Récupération de l'article complet...</span>
+                <span>{t('reader.fetchingFullContent')}</span>
               </div>
             )}
 
             {/* Full content error with retry */}
             {fullContentStatus === 'error' && (
               <div className="reader-fullcontent-banner error">
-                <span>Impossible de récupérer l'article complet</span>
+                <span>{t('reader.cannotFetchFullContent')}</span>
                 <button className="reader-fullcontent-btn" onClick={handleFetchFullContent}>
-                  Réessayer
+                  {t('common.retry')}
                 </button>
               </div>
             )}
@@ -1300,14 +1304,14 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {showTranslation && translateState === 'loading' && (
               <div className="reader-fullcontent-banner loading">
                 <span className="btn-spinner" />
-                <span>Traduction en cours...</span>
+                <span>{t('bookmarks.translating')}</span>
               </div>
             )}
             {showTranslation && translateState === 'error' && (
               <div className="reader-fullcontent-banner error">
                 <span>{translateError}</span>
                 <button className="reader-fullcontent-btn" onClick={() => setTranslateState('idle')}>
-                  Réessayer
+                  {t('common.retry')}
                 </button>
               </div>
             )}
@@ -1323,7 +1327,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {!skipExtraction && fullContentStatus === 'not-needed' && hasValidUrl && (
               <div className="reader-fullcontent-fetch">
                 <button className="reader-fullcontent-btn" onClick={handleFetchFullContent}>
-                  ↻ Récupérer depuis le site original
+                  ↻ {t('reader.fetchFromOriginal')}
                 </button>
               </div>
             )}
@@ -1331,17 +1335,17 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {item.source === 'reddit' && redditComments.length > 0 && (
               <section className="reader-comments-section">
                 <div className="reader-comments-header">
-                  <h2 className="reader-comments-title">Commentaires</h2>
+                  <h2 className="reader-comments-title">{t('reader.comments')}</h2>
                   <span className="reader-comments-badge">
                     {formatCommentCount(displayedCommentCount ?? redditComments.length)}
                   </span>
                   {redditCommentsState.status === 'loading' && (
-                    <span className="reader-comments-status">Chargement en direct...</span>
+                    <span className="reader-comments-status">{t('reader.loadingLive')}</span>
                   )}
                 </div>
                 {redditCommentsState.status === 'error' && (
                   <p className="reader-comments-error">
-                    Impossible de charger les commentaires en direct (accès direct et proxy). Affichage des données locales.
+                    {t('reader.commentsLoadError')}
                   </p>
                 )}
                 <div className="reader-comments-list">
@@ -1363,19 +1367,19 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
             {item.source === 'reddit' && redditComments.length === 0 && (
               <section className="reader-comments-section">
                 <div className="reader-comments-header">
-                  <h2 className="reader-comments-title">Commentaires</h2>
+                  <h2 className="reader-comments-title">{t('reader.comments')}</h2>
                   {redditCommentsState.status === 'loading' && (
-                    <span className="reader-comments-status">Chargement en direct...</span>
+                    <span className="reader-comments-status">{t('reader.loadingLive')}</span>
                   )}
                 </div>
-                <p className="reader-comments-empty">Aucun commentaire disponible pour ce post.</p>
+                <p className="reader-comments-empty">{t('reader.noCommentsAvailable')}</p>
               </section>
             )}
 
             {hasValidUrl && (
               <div className="reader-footer">
                 <button className="reader-original-link" onClick={handleOpenExternal}>
-                  Ouvrir dans le navigateur ↗
+                  {t('bookmarks.openInBrowserArrow')}
                 </button>
               </div>
             )}
@@ -1399,7 +1403,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 <div className="webview-loading-bar" />
                 <div className="webview-loading-content">
                   <span className="webview-loading-spinner" />
-                  <span className="webview-loading-text">Chargement de la page...</span>
+                  <span className="webview-loading-text">{t('reader.loadingPage')}</span>
                 </div>
               </motion.div>
             )}
@@ -1416,16 +1420,16 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 transition={{ duration: 0.3 }}
               >
                 <span className="webview-error-icon">⊘</span>
-                <h3 className="webview-error-title">Page non disponible</h3>
+                <h3 className="webview-error-title">{t('reader.pageNotAvailable')}</h3>
                 <p className="webview-error-text">
-                  Impossible de charger cette page.
+                  {t('reader.cannotLoadPage')}
                 </p>
                 <div className="webview-error-actions">
                   <button className="webview-error-btn primary" onClick={handleOpenExternal}>
-                    Ouvrir dans le navigateur ↗
+                    {t('bookmarks.openInBrowserArrow')}
                   </button>
                   <button className="webview-error-btn" onClick={handleReaderView}>
-                    Retour au mode lecture
+                    {t('reader.backToReader')}
                   </button>
                 </div>
               </motion.div>
@@ -1443,13 +1447,13 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 transition={{ duration: 0.25, delay: 0.5 }}
               >
                 <span className="webview-floating-text">
-                  La page ne s'affiche pas ?
+                  {t('reader.pageNotDisplaying')}
                 </span>
                 <button className="webview-floating-btn" onClick={handleOpenExternal}>
-                  Ouvrir dans le navigateur ↗
+                  {t('bookmarks.openInBrowserArrow')}
                 </button>
                 <button className="webview-floating-btn secondary" onClick={handleReaderView}>
-                  Mode lecture
+                  {t('bookmarks.readerMode')}
                 </button>
               </motion.div>
             )}
@@ -1499,7 +1503,7 @@ export function ReaderPanel({ item, onToggleStar, onSummaryGenerated, onFullCont
                 window.getSelection()?.removeAllRanges();
               }
             }}
-            title="Créer une note"
+            title={t('bookmarks.createNote')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9" />

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from './ui/button';
@@ -10,6 +11,7 @@ interface PasswordVaultUnlockProps {
 }
 
 export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
+  const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
       const result = await invoke<UnlockResult>('pw_unlock_vault', { password });
       onUnlocked(result);
     } catch (err) {
-      setError(typeof err === 'string' ? err : 'Mot de passe incorrect.');
+      setError(typeof err === 'string' ? err : t('password.incorrectPassword'));
     } finally {
       setLoading(false);
     }
@@ -54,10 +56,10 @@ export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
             <Lock size={32} />
           </div>
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            Déverrouiller le coffre-fort
+            {t('password.unlockVault')}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] text-center">
-            Entrez votre mot de passe maître pour accéder à vos identifiants.
+            {t('password.unlockVaultDesc')}
           </p>
         </div>
 
@@ -65,7 +67,7 @@ export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Mot de passe maître
+              {t('password.masterPassword')}
             </label>
             <div className="relative">
               <input
@@ -76,7 +78,7 @@ export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
                   'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                   'placeholder:text-[var(--text-tertiary)]',
                 )}
-                placeholder="Entrez votre mot de passe maître"
+                placeholder={t('password.enterMasterPassword')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
@@ -109,10 +111,10 @@ export function PasswordVaultUnlock({ onUnlocked }: PasswordVaultUnlockProps) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Déverrouillage...
+                {t('password.unlocking')}
               </span>
             ) : (
-              'Déverrouiller'
+              t('password.unlock')
             )}
           </Button>
         </div>

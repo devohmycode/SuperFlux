@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchBookmarks, removeBookmark, toggleBookmarkRead, type WebBookmark } from '../services/bookmarkService';
@@ -33,6 +34,7 @@ type ContextMenuState =
   | null;
 
 export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFolderMap, bookmarkFolders, onSelectBookmark, onMoveBookmarkToFolder, translateActive: translateActiveProp, onTranslateActiveChange }: BookmarkPanelProps) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [bookmarks, setBookmarks] = useState<WebBookmark[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +147,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
   if (!user) {
     return (
       <div className="bookmark-panel-empty">
-        <p>Connectez-vous pour voir vos bookmarks</p>
+        <p>{t('bookmarks.loginToSee')}</p>
       </div>
     );
   }
@@ -172,35 +174,35 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
           <GlassIconButton
             color="blue"
             icon="✱"
-            title="Tous les bookmarks"
+            title={t('bookmarks.allBookmarks')}
             onClick={() => setFilter('all')}
             active={filter === 'all'}
           />
           <GlassIconButton
             color="indigo"
             icon="○"
-            title="Non lus uniquement"
+            title={t('bookmarks.unreadOnly')}
             onClick={() => setFilter('unread')}
             active={filter === 'unread'}
           />
           <GlassIconButton
             color="orange"
             icon="▦"
-            title="Vue cartes"
+            title={t('common.cardsView')}
             onClick={() => setViewMode('cards')}
             active={viewMode === 'cards'}
           />
           <GlassIconButton
             color="green"
             icon="☰"
-            title="Vue compacte"
+            title={t('common.compactView')}
             onClick={() => setViewMode('compact')}
             active={viewMode === 'compact'}
           />
           <GlassIconButton
             color="blue"
             icon={translateLoading ? <span className="btn-spinner" /> : '🌐'}
-            title={translateActive ? 'Voir les originaux' : 'Traduire la liste'}
+            title={t(translateActive ? 'common.viewOriginals' : 'common.translateList')}
             onClick={handleTranslateList}
             disabled={translateLoading || bookmarks.length === 0}
             active={translateActive}
@@ -208,7 +210,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
           <GlassIconButton
             color="purple"
             icon="↻"
-            title="Actualiser"
+            title={t('common.refresh')}
             onClick={load}
           />
         </div>
@@ -217,12 +219,12 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
       {/* Content */}
       <div className="bookmark-panel-list">
         {loading ? (
-          <div className="bookmark-panel-empty">Chargement...</div>
+          <div className="bookmark-panel-empty">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="bookmark-panel-empty">
-            <p>{filter === 'unread' ? 'Aucun bookmark non lu' : 'Aucun bookmark'}</p>
+            <p>{filter === 'unread' ? t('bookmarks.noUnreadBookmarks') : t('bookmarks.noBookmarks')}</p>
             <p className="bookmark-panel-hint">
-              Installez l'extension Chrome SuperFlux pour sauvegarder des pages web
+              {t('bookmarks.installExtension')}
             </p>
           </div>
         ) : viewMode === 'compact' ? (
@@ -253,7 +255,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                     <div className="bk-compact-item__meta">
                       <span className="bk-compact-item__site">{bk.site_name || new URL(bk.url).hostname}</span>
                       <span className="bk-compact-item__sep">·</span>
-                      <span className="bk-compact-item__date">{formatDate(bk.created_at)}</span>
+                      <span className="bk-compact-item__date">{formatDate(bk.created_at, t)}</span>
                       <span className={`bk-compact-item__source bk-compact-item__source--${bk.source}`}>
                         {bk.source}
                       </span>
@@ -268,21 +270,21 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                       const isImportant = bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER;
                       onMoveBookmarkToFolder?.(bk.id, isImportant ? undefined : IMPORTANT_FOLDER);
                     }}
-                    title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'Retirer des Importants' : 'Ajouter aux Importants'}
+                    title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? t('bookmarks.removeFromImportant') : t('bookmarks.addToImportant')}
                   >
                     {bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? '★' : '☆'}
                   </button>
                   <button
                     className="bk-compact-item__btn"
                     onClick={(e) => handleToggleRead(bk.id, !bk.is_read, e)}
-                    title={bk.is_read ? 'Marquer non lu' : 'Marquer lu'}
+                    title={bk.is_read ? t('bookmarks.markUnread') : t('bookmarks.markRead')}
                   >
                     {bk.is_read ? '○' : '●'}
                   </button>
                   <button
                     className="bk-compact-item__btn bk-compact-item__btn--delete"
                     onClick={(e) => handleRemove(bk.id, e)}
-                    title="Supprimer"
+                    title={t('common.delete')}
                   >
                     ✕
                   </button>
@@ -324,7 +326,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                       )}
                       {bk.site_name || new URL(bk.url).hostname}
                     </span>
-                    <span className="bk-blob-card__time">{formatDate(bk.created_at)}</span>
+                    <span className="bk-blob-card__time">{formatDate(bk.created_at, t)}</span>
                   </div>
 
                   <div className="bk-blob-card__body">
@@ -354,21 +356,21 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                           const isImportant = bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER;
                           onMoveBookmarkToFolder?.(bk.id, isImportant ? undefined : IMPORTANT_FOLDER);
                         }}
-                        title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? 'Retirer des Importants' : 'Ajouter aux Importants'}
+                        title={bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? t('bookmarks.removeFromImportant') : t('bookmarks.addToImportant')}
                       >
                         {bookmarkFolderMap?.[bk.id] === IMPORTANT_FOLDER ? '★' : '☆'}
                       </button>
                       <button
                         className="bk-blob-card__action-btn"
                         onClick={(e) => handleToggleRead(bk.id, !bk.is_read, e)}
-                        title={bk.is_read ? 'Marquer non lu' : 'Marquer lu'}
+                        title={bk.is_read ? t('bookmarks.markUnread') : t('bookmarks.markRead')}
                       >
                         {bk.is_read ? '○' : '●'}
                       </button>
                       <button
                         className="bk-blob-card__action-btn bk-blob-card__action-btn--delete"
                         onClick={(e) => handleRemove(bk.id, e)}
-                        title="Supprimer"
+                        title={t('common.delete')}
                       >
                         ✕
                       </button>
@@ -409,7 +411,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
             style={{ position: 'relative' }}
           >
             <span className="feed-context-menu-icon">📁</span>
-            Dossier ›
+            {t('common.folder')} ›
             {folderSubmenuOpen && (
               <div
                 className="feed-context-menu"
@@ -422,7 +424,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
                     setContextMenu(null);
                   }}
                 >
-                  Aucun dossier
+                  {t('common.noFolder')}
                 </button>
                 {(bookmarkFolders ?? []).map(folder => (
                   <button
@@ -447,7 +449,7 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}
@@ -455,14 +457,14 @@ export function BookmarkPanel({ selectedBookmarkId, selectedFolder, bookmarkFold
   );
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, t: (key: string, options?: Record<string, unknown>) => string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / 86400000);
 
-  if (days === 0) return "Aujourd'hui";
-  if (days === 1) return 'Hier';
-  if (days < 7) return `Il y a ${days}j`;
+  if (days === 0) return t('common.today');
+  if (days === 1) return t('common.yesterday');
+  if (days < 7) return t('common.daysAgo', { count: days });
   return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }

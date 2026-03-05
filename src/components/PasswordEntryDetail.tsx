@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Eye, EyeOff, Copy, Check, ExternalLink, Star, Trash2,
@@ -20,7 +22,7 @@ interface PasswordEntryDetailProps {
   isNew?: boolean;
 }
 
-function getStrengthFromPassword(pw: string): { label: string; color: string; percent: number } {
+function getStrengthFromPassword(pw: string): { labelKey: string; color: string; percent: number } {
   let score = 0;
   if (pw.length >= 8) score += 1;
   if (pw.length >= 12) score += 1;
@@ -29,9 +31,9 @@ function getStrengthFromPassword(pw: string): { label: string; color: string; pe
   if (/\d/.test(pw)) score += 1;
   if (/[^a-zA-Z0-9]/.test(pw)) score += 1;
   const percent = Math.min((score / 6) * 100, 100);
-  if (score <= 2) return { label: 'Faible', color: 'bg-red-500', percent };
-  if (score <= 4) return { label: 'Moyen', color: 'bg-amber-500', percent };
-  return { label: 'Fort', color: 'bg-green-500', percent };
+  if (score <= 2) return { labelKey: 'password.weak', color: 'bg-red-500', percent };
+  if (score <= 4) return { labelKey: 'password.medium', color: 'bg-amber-500', percent };
+  return { labelKey: 'password.strong', color: 'bg-green-500', percent };
 }
 
 export function PasswordEntryDetail({
@@ -43,6 +45,7 @@ export function PasswordEntryDetail({
   onCopyUsername,
   isNew,
 }: PasswordEntryDetailProps) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(isNew ?? false);
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -193,7 +196,7 @@ export function PasswordEntryDetail({
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--border-default)]">
         <h2 className="flex-1 text-sm font-semibold text-[var(--text-primary)] truncate">
-          {entry.title || 'Nouvelle entrée'}
+          {entry.title || t('password.newEntry')}
         </h2>
         <button
           onClick={handleToggleFavorite}
@@ -203,13 +206,13 @@ export function PasswordEntryDetail({
               ? 'text-amber-400 hover:bg-amber-400/10'
               : 'text-[var(--text-tertiary)] hover:text-amber-400 hover:bg-[var(--bg-hover)]',
           )}
-          title={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          title={favorite ? t('password.removeFromFavorites') : t('password.addToFavorites')}
         >
           <Star size={16} fill={favorite ? 'currentColor' : 'none'} />
         </button>
         {!editing ? (
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="gap-1.5">
-            <Pencil size={13} /> Modifier
+            <Pencil size={13} /> {t('common.edit')}
           </Button>
         ) : (
           <div className="flex gap-1">
@@ -217,7 +220,7 @@ export function PasswordEntryDetail({
               <X size={13} />
             </Button>
             <Button size="sm" onClick={handleSave}>
-              Enregistrer
+              {t('common.save')}
             </Button>
           </div>
         )}
@@ -226,14 +229,14 @@ export function PasswordEntryDetail({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Title */}
-        <FieldRow label="Titre">
+        <FieldRow label={t('password.titleLabel')}>
           <input
             type="text"
             className={inputClasses}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={!editing}
-            placeholder="Titre de l'entrée"
+            placeholder={t('password.entryTitle')}
           />
         </FieldRow>
 
@@ -249,7 +252,7 @@ export function PasswordEntryDetail({
               placeholder="https://..."
             />
             {url && !editing && (
-              <Button variant="ghost" size="icon" onClick={handleOpenUrl} title="Ouvrir">
+              <Button variant="ghost" size="icon" onClick={handleOpenUrl} title={t('common.open')}>
                 <ExternalLink size={14} />
               </Button>
             )}
@@ -257,7 +260,7 @@ export function PasswordEntryDetail({
         </FieldRow>
 
         {/* Username */}
-        <FieldRow label="Identifiant">
+        <FieldRow label={t('password.usernameLabel')}>
           <div className="flex gap-1.5">
             <input
               type="text"
@@ -272,7 +275,7 @@ export function PasswordEntryDetail({
                 variant="ghost"
                 size="icon"
                 onClick={() => { handleCopy(username, 'username'); onCopyUsername(entry.id); }}
-                title="Copier"
+                title={t('password.copy')}
               >
                 {copiedField === 'username' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
               </Button>
@@ -281,7 +284,7 @@ export function PasswordEntryDetail({
         </FieldRow>
 
         {/* Password */}
-        <FieldRow label="Mot de passe">
+        <FieldRow label={t('password.passwordLabel')}>
           <div className="space-y-1.5">
             <div className="flex gap-1.5">
               <div className="relative flex-1">
@@ -291,7 +294,7 @@ export function PasswordEntryDetail({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={!editing}
-                  placeholder="Mot de passe"
+                  placeholder={t('password.passwordLabel')}
                 />
                 <button
                   type="button"
@@ -307,7 +310,7 @@ export function PasswordEntryDetail({
                   variant="ghost"
                   size="icon"
                   onClick={() => { handleCopy(password, 'password'); onCopyPassword(entry.id); }}
-                  title="Copier"
+                  title={t('password.copy')}
                 >
                   {copiedField === 'password' ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                 </Button>
@@ -317,7 +320,7 @@ export function PasswordEntryDetail({
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowGenerator(!showGenerator)}
-                  title="Générer"
+                  title={t('common.generate')}
                 >
                   <Wand2 size={14} />
                 </Button>
@@ -336,7 +339,7 @@ export function PasswordEntryDetail({
                   'text-[10px]',
                   pwStrength.percent <= 33 ? 'text-red-500' : pwStrength.percent <= 66 ? 'text-amber-500' : 'text-green-500',
                 )}>
-                  {pwStrength.label}
+                  {t(pwStrength.labelKey)}
                 </span>
               </div>
             )}
@@ -363,7 +366,7 @@ export function PasswordEntryDetail({
           ) : entry.totp_secret ? (
             <TotpDisplay entryId={entry.id} />
           ) : (
-            <span className="text-xs text-[var(--text-tertiary)]">Non configuré</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{t('password.notConfigured')}</span>
           )}
         </FieldRow>
 
@@ -374,7 +377,7 @@ export function PasswordEntryDetail({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             disabled={!editing}
-            placeholder="Notes privées..."
+            placeholder={t('password.privateNotes')}
           />
         </FieldRow>
 
@@ -391,21 +394,21 @@ export function PasswordEntryDetail({
         </FieldRow>
 
         {/* Folder */}
-        <FieldRow label="Dossier">
+        <FieldRow label={t('common.folder')}>
           {editing ? (
             <select
               className={inputClasses}
               value={folderId}
               onChange={(e) => setFolderId(e.target.value)}
             >
-              <option value="">Aucun dossier</option>
+              <option value="">{t('common.noFolder')}</option>
               {folders.map((f) => (
                 <option key={f.id} value={f.id}>{f.name}</option>
               ))}
             </select>
           ) : (
             <span className="text-sm text-[var(--text-primary)]">
-              {folders.find((f) => f.id === entry.folder_id)?.name || 'Aucun'}
+              {folders.find((f) => f.id === entry.folder_id)?.name || t('password.none')}
             </span>
           )}
         </FieldRow>
@@ -421,7 +424,7 @@ export function PasswordEntryDetail({
               onClick={() => setShowHistory(!showHistory)}
             >
               {showHistory ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              Historique des mots de passe ({entry.password_history.length})
+              {t('password.passwordHistory')} ({entry.password_history.length})
             </button>
             {showHistory && (
               <div className="mt-2 space-y-1.5">
@@ -434,7 +437,7 @@ export function PasswordEntryDetail({
                       {'*'.repeat(Math.min(h.password.length, 20))}
                     </code>
                     <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">
-                      {new Date(h.changed_at).toLocaleDateString('fr-FR')}
+                      {new Date(h.changed_at).toLocaleDateString(i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
                     </span>
                     <button
                       onClick={() => handleCopy(h.password, `history-${i}`)}
@@ -457,7 +460,7 @@ export function PasswordEntryDetail({
           >
             {showAttachments ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             <Paperclip size={12} />
-            Pièces jointes ({entry.attachments.length})
+            {t('password.attachments')} ({entry.attachments.length})
           </button>
           {showAttachments && (
             <div className="mt-2 space-y-1.5">
@@ -497,7 +500,7 @@ export function PasswordEntryDetail({
                       'border border-dashed border-[var(--border-default)]',
                     )}
                   >
-                    <Plus size={12} /> Ajouter une pièce jointe
+                    <Plus size={12} /> {t('password.addAttachment')}
                   </button>
                 </>
               )}
@@ -508,12 +511,12 @@ export function PasswordEntryDetail({
         {/* Metadata */}
         <div className="border-t border-[var(--border-subtle)] pt-3 space-y-1">
           <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]">
-            <span>Créé le</span>
-            <span>{new Date(entry.created_at).toLocaleString('fr-FR')}</span>
+            <span>{t('password.createdAt')}</span>
+            <span>{new Date(entry.created_at).toLocaleString(i18n.language === 'fr' ? 'fr-FR' : 'en-US')}</span>
           </div>
           <div className="flex justify-between text-[10px] text-[var(--text-tertiary)]">
-            <span>Modifié le</span>
-            <span>{new Date(entry.updated_at).toLocaleString('fr-FR')}</span>
+            <span>{t('password.modifiedAt')}</span>
+            <span>{new Date(entry.updated_at).toLocaleString(i18n.language === 'fr' ? 'fr-FR' : 'en-US')}</span>
           </div>
         </div>
 
@@ -521,20 +524,20 @@ export function PasswordEntryDetail({
         <div className="border-t border-[var(--border-subtle)] pt-3">
           {confirmDelete ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-500">Confirmer la suppression ?</span>
+              <span className="text-xs text-red-500">{t('password.confirmDelete')}</span>
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={() => onDelete(entry.id)}
               >
-                Supprimer
+                {t('common.delete')}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setConfirmDelete(false)}
               >
-                Annuler
+                {t('common.cancel')}
               </Button>
             </div>
           ) : (
@@ -544,7 +547,7 @@ export function PasswordEntryDetail({
               className="text-red-500 hover:text-red-400 hover:bg-red-500/10 gap-1.5"
               onClick={() => setConfirmDelete(true)}
             >
-              <Trash2 size={13} /> Supprimer cette entrée
+              <Trash2 size={13} /> {t('password.deleteEntry')}
             </Button>
           )}
         </div>

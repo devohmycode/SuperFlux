@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import type { Snippet } from './ExpanderFileList';
 
 const PLACEHOLDERS = ['{uuid}', '{clipboard}', '{date}', '{time}', '{datetime}', '{day}'];
@@ -13,12 +15,13 @@ function generateUUID(): string {
 
 export async function resolveSnippet(content: string): Promise<string> {
   const now = new Date();
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
   let result = content;
 
-  result = result.replace(/\{date\}/g, now.toLocaleDateString('fr-FR'));
-  result = result.replace(/\{time\}/g, now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }));
-  result = result.replace(/\{datetime\}/g, `${now.toLocaleDateString('fr-FR')} ${now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`);
-  result = result.replace(/\{day\}/g, now.toLocaleDateString('fr-FR', { weekday: 'long' }));
+  result = result.replace(/\{date\}/g, now.toLocaleDateString(locale));
+  result = result.replace(/\{time\}/g, now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }));
+  result = result.replace(/\{datetime\}/g, `${now.toLocaleDateString(locale)} ${now.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`);
+  result = result.replace(/\{day\}/g, now.toLocaleDateString(locale, { weekday: 'long' }));
 
   while (result.includes('{uuid}')) {
     result = result.replace('{uuid}', generateUUID());
@@ -29,7 +32,7 @@ export async function resolveSnippet(content: string): Promise<string> {
       const clip = await navigator.clipboard.readText();
       result = result.replace(/\{clipboard\}/g, clip);
     } catch {
-      result = result.replace(/\{clipboard\}/g, '[presse-papier inaccessible]');
+      result = result.replace(/\{clipboard\}/g, i18n.t('expander.clipboardUnavailable'));
     }
   }
 
@@ -39,7 +42,7 @@ export async function resolveSnippet(content: string): Promise<string> {
 // ── Time grouping helpers ──
 interface Group { label: string; items: Snippet[] }
 
-function groupSnippets(snippets: Snippet[]): Group[] {
+function groupSnippets(snippets: Snippet[], t: (key: string) => string): Group[] {
   const now = Date.now();
   const DAY = 86_400_000;
   const WEEK = 7 * DAY;
@@ -52,11 +55,11 @@ function groupSnippets(snippets: Snippet[]): Group[] {
   for (const s of snippets) {
     const age = now - new Date(s.updatedAt).getTime();
     let label: string;
-    if (age < DAY) label = "Aujourd'hui";
-    else if (age < WEEK) label = 'Cette semaine';
-    else if (age < MONTH) label = 'Ce mois';
-    else if (age < YEAR) label = 'Cette année';
-    else label = 'Plus ancien';
+    if (age < DAY) label = t('common.today');
+    else if (age < WEEK) label = t('expander.thisWeek');
+    else if (age < MONTH) label = t('expander.thisMonth');
+    else if (age < YEAR) label = t('expander.thisYear');
+    else label = t('common.older');
 
     if (!map[label]) { map[label] = []; order.push(label); }
     map[label].push(s);
@@ -88,6 +91,7 @@ export function SuperExpander({
   snippets, snippet, onUpdateSnippet, onCopySnippet, onAddSnippet,
   onDeleteSnippet, onSelectSnippet, onSetShortcut, onRemoveShortcut, searchQuery,
 }: SuperExpanderProps) {
+  const { t } = useTranslation();
   const [subMode, setSubMode] = useState<SubMode>('list');
 
   return (
@@ -98,13 +102,13 @@ export function SuperExpander({
           className={`se-mode-tab ${subMode === 'list' ? 'se-mode-tab--active' : ''}`}
           onClick={() => setSubMode('list')}
         >
-          Snippets
+          {t('expander.snippets')}
         </button>
         <button
           className={`se-mode-tab ${subMode === 'create' ? 'se-mode-tab--active' : ''}`}
           onClick={() => setSubMode('create')}
         >
-          + Créer
+          + {t('expander.create')}
         </button>
       </div>
 
@@ -141,6 +145,7 @@ interface CreateViewProps {
 }
 
 function CreateView({ onAddSnippet, switchToList }: CreateViewProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -184,17 +189,17 @@ function CreateView({ onAddSnippet, switchToList }: CreateViewProps) {
       <div className="se-create-body">
         {/* Left: Content */}
         <div className="se-create-left">
-          <label className="se-label">Snippet</label>
+          <label className="se-label">{t('expander.snippet')}</label>
           <textarea
             ref={textareaRef}
             className="se-content-textarea"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Contenu du snippet…"
+            placeholder={t('expander.snippetContent')}
             spellCheck={false}
           />
           <div className="se-placeholder-row">
-            <span className="se-placeholder-label">Placeholders :</span>
+            <span className="se-placeholder-label">{t('expander.placeholders')} :</span>
             {PLACEHOLDERS.map(p => (
               <button key={p} className="se-placeholder-btn" onClick={() => insertPlaceholder(p)}>{p}</button>
             ))}
@@ -204,13 +209,13 @@ function CreateView({ onAddSnippet, switchToList }: CreateViewProps) {
         {/* Right: Metadata */}
         <div className="se-create-right">
           <div className="se-field">
-            <label className="se-label">Nom</label>
+            <label className="se-label">{t('expander.name')}</label>
             <input
               type="text"
               className="se-text-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nom du snippet"
+              placeholder={t('expander.snippetName')}
             />
           </div>
           <div className="se-field">
@@ -230,14 +235,14 @@ function CreateView({ onAddSnippet, switchToList }: CreateViewProps) {
       <div className="se-footer">
         <div className="se-footer-left">
           <span>⚡</span>
-          <span>Créer un Snippet</span>
+          <span>{t('expander.createSnippet')}</span>
         </div>
         <button
           className="se-save-btn"
           onClick={handleSave}
           disabled={!content.trim() || !name.trim()}
         >
-          <span>Enregistrer</span>
+          <span>{t('common.save')}</span>
           <kbd className="se-kbd">Ctrl</kbd>
           <kbd className="se-kbd">↵</kbd>
         </button>
@@ -268,6 +273,7 @@ function ListView({
   onSelectSnippet, onDeleteSnippet, onCopySnippet, onUpdateSnippet, onCreateSnippet,
   onSetShortcut, onRemoveShortcut,
 }: ListViewProps) {
+  const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
   const [editingField, setEditingField] = useState<'name' | 'keyword' | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -283,7 +289,7 @@ function ListView({
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
   [snippets, sq]);
 
-  const groups = useMemo(() => groupSnippets(filtered), [filtered]);
+  const groups = useMemo(() => groupSnippets(filtered, t), [filtered, t]);
 
   // Reset capture state when selection changes
   useEffect(() => {
@@ -315,7 +321,7 @@ function ListView({
       setCapturedParts([]);
       setShortcutError(null);
       onSetShortcut(selectedSnippet.id, shortcutStr).catch((err: unknown) => {
-        setShortcutError(typeof err === 'string' ? err : (err as Error).message || 'Erreur');
+        setShortcutError(typeof err === 'string' ? err : (err as Error).message || t('common.error'));
       });
     };
     window.addEventListener('keydown', handleKeyDown, true);
@@ -365,8 +371,8 @@ function ListView({
     return (
       <div className="se-empty-state">
         <span className="se-empty-icon">⚡</span>
-        <p>{searchQuery ? 'Aucun snippet trouvé' : 'Aucun snippet créé'}</p>
-        <button className="se-empty-btn" onClick={onCreateSnippet}>+ Créer un snippet</button>
+        <p>{searchQuery ? t('expander.noSnippetFound') : t('expander.noSnippetsCreated')}</p>
+        <button className="se-empty-btn" onClick={onCreateSnippet}>+ {t('expander.createSnippet')}</button>
       </div>
     );
   }
@@ -388,7 +394,7 @@ function ListView({
                   onDoubleClick={() => onCopySnippet(s.id)}
                 >
                   <span className="se-snippet-icon">{s.shortcut ? '⌨' : '⚡'}</span>
-                  <span className="se-snippet-name">{s.name || 'Sans titre'}</span>
+                  <span className="se-snippet-name">{s.name || t('common.untitled')}</span>
                   {s.shortcut && (
                     <span className="sc-shortcut-badge">
                       {formatShortcutParts(s.shortcut).map((k, i) => (
@@ -407,10 +413,10 @@ function ListView({
         {selectedSnippet && (
           <div className="se-preview-panel">
             <div className="se-preview-content">
-              <pre className="se-preview-text">{selectedSnippet.content || '(vide)'}</pre>
+              <pre className="se-preview-text">{selectedSnippet.content || `(${t('expander.empty')})`}</pre>
             </div>
             <div className="se-info-section">
-              <div className="se-info-header">Information</div>
+              <div className="se-info-header">{t('expander.information')}</div>
               <div className="se-info-rows">
                 <div className="se-info-row">
                   <span className="se-info-label">Label</span>
@@ -455,7 +461,7 @@ function ListView({
 
             {/* Shortcut section */}
             <div className="sc-shortcut-section">
-              <div className="se-info-header">Raccourci global</div>
+              <div className="se-info-header">{t('expander.globalShortcut')}</div>
               {selectedSnippet.shortcut ? (
                 <div className="sc-shortcut-display">
                   <div className="sc-shortcut-keys">
@@ -467,7 +473,7 @@ function ListView({
                     className="sc-action-btn sc-action-btn--danger sc-shortcut-remove"
                     onClick={() => onRemoveShortcut(selectedSnippet.id)}
                   >
-                    Supprimer
+                    {t('common.delete')}
                   </button>
                 </div>
               ) : capturing ? (
@@ -476,16 +482,16 @@ function ListView({
                     {capturedParts.length > 0 ? (
                       capturedParts.map((k, i) => <kbd key={i} className="se-kbd">{k}</kbd>)
                     ) : (
-                      <span className="sc-shortcut-hint">Appuyez sur une combinaison de touches...</span>
+                      <span className="sc-shortcut-hint">{t('expander.pressKeyCombination')}</span>
                     )}
                   </div>
                   <button className="sc-action-btn" onClick={() => { setCapturing(false); setCapturedParts([]); }}>
-                    Annuler
+                    {t('common.cancel')}
                   </button>
                 </div>
               ) : (
                 <button className="sc-action-btn sc-shortcut-assign" onClick={() => { setCapturing(true); setShortcutError(null); }}>
-                  ⌨ Assigner un raccourci
+                  ⌨ {t('expander.assignShortcut')}
                 </button>
               )}
               {shortcutError && <p className="sc-shortcut-error">{shortcutError}</p>}
@@ -502,12 +508,12 @@ function ListView({
         </div>
         <div className="se-footer-right">
           <div className="se-footer-action">
-            <span>Copier</span>
+            <span>{t('expander.copy')}</span>
             <kbd className="se-kbd">↵</kbd>
           </div>
           <div className="se-footer-sep" />
           <div className="se-footer-action">
-            <span>Supprimer</span>
+            <span>{t('common.delete')}</span>
             <kbd className="se-kbd">Shift</kbd>
             <kbd className="se-kbd">Del</kbd>
           </div>

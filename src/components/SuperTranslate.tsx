@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { translateRaw, LANGUAGES } from '../services/translationService';
 
-const ALL_LANGS = [{ code: 'auto', label: 'Détecter la langue' }, ...LANGUAGES];
-
 export function SuperTranslate() {
+  const { t } = useTranslation();
+  const ALL_LANGS = [{ code: 'auto', label: t('translate.detectLanguage') }, ...LANGUAGES];
   const [sourceText, setSourceText] = useState('');
   const [resultText, setResultText] = useState('');
   const [sourceLang, setSourceLang] = useState('auto');
@@ -28,7 +29,7 @@ export function SuperTranslate() {
       if (sl === 'auto' && res.detectedLang) setDetectedLang(res.detectedLang);
     } catch (err) {
       if (id !== abortRef.current) return;
-      setResultText(`Erreur : ${err instanceof Error ? err.message : 'Échec de la traduction'}`);
+      setResultText(`${t('common.error')} : ${err instanceof Error ? err.message : t('translate.translationFailed')}`);
     } finally {
       if (id === abortRef.current) setIsTranslating(false);
     }
@@ -94,7 +95,7 @@ export function SuperTranslate() {
           <span className="translate-detected">({detectedLabel})</span>
         )}
 
-        <button className="translate-swap-btn" onClick={handleSwap} title="Inverser les langues">
+        <button className="translate-swap-btn" onClick={handleSwap} title={t('translate.swapLanguages')}>
           ⇄
         </button>
 
@@ -109,10 +110,10 @@ export function SuperTranslate() {
         </select>
 
         <div className="translate-actions">
-          <button className="translate-action-btn" onClick={handleCopy} title="Copier la traduction" disabled={!resultText}>
+          <button className="translate-action-btn" onClick={handleCopy} title={t('translate.copyTranslation')} disabled={!resultText}>
             📋
           </button>
-          <button className="translate-action-btn" onClick={handleClear} title="Effacer" disabled={!sourceText}>
+          <button className="translate-action-btn" onClick={handleClear} title={t('translate.clear')} disabled={!sourceText}>
             ✕
           </button>
         </div>
@@ -123,14 +124,14 @@ export function SuperTranslate() {
           className="translate-textarea"
           value={sourceText}
           onChange={e => setSourceText(e.target.value)}
-          placeholder="Saisir le texte à traduire..."
+          placeholder={t('translate.enterText')}
           autoFocus
         />
         <textarea
           className="translate-textarea translate-textarea--result"
-          value={isTranslating ? 'Traduction en cours...' : resultText}
+          value={isTranslating ? t('translate.translating') : resultText}
           readOnly
-          placeholder="Traduction"
+          placeholder={t('translate.translation')}
         />
       </div>
     </div>

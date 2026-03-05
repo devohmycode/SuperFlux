@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePro } from '../contexts/ProContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,6 +7,7 @@ import { LEMONSQUEEZY_CHECKOUT_URL, LEMONSQUEEZY_SUBSCRIPTION_URL } from '../ser
 import { openExternal } from '../lib/tauriFetch';
 
 export function UpgradeModal() {
+  const { t } = useTranslation();
   const { upgradeModalOpen, hideUpgradeModal, activateLicense } = usePro();
   const { user } = useAuth();
   const [key, setKey] = useState('');
@@ -24,10 +26,10 @@ export function UpgradeModal() {
         setKey('');
         hideUpgradeModal();
       } else {
-        setError(result.error || 'Activation échouée');
+        setError(result.error || t('upgrade.activationFailed'));
       }
     } catch {
-      setError('Erreur inattendue');
+      setError(t('upgrade.unexpectedError'));
     } finally {
       setLoading(false);
     }
@@ -62,22 +64,22 @@ export function UpgradeModal() {
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className="modal-header">
-              <h2 className="modal-title">Superflux Pro</h2>
+              <h2 className="modal-title">{t('upgrade.title')}</h2>
               <button className="modal-close" onClick={handleClose}>×</button>
             </div>
 
             <div className="settings-body">
               <div className="settings-section">
                 <p className="settings-section-desc">
-                  Débloquez tout le potentiel de Superflux avec une licence Pro :
+                  {t('upgrade.description')}
                 </p>
                 <ul style={{ margin: '12px 0', paddingLeft: 20, lineHeight: 1.8 }}>
-                  <li>Plus de 10 flux RSS</li>
-                  <li>Plus de 5 dossiers</li>
-                  <li>Résumés IA illimités</li>
-                  <li>Surlignage et notes sur les articles</li>
-                  <li>SuperEditor, SuperDraw, SuperPassword, SuperMarkdown</li>
-                  <li>Accès anticipé aux nouvelles fonctionnalités</li>
+                  <li>{t('upgrade.featureFeeds')}</li>
+                  <li>{t('upgrade.featureFolders')}</li>
+                  <li>{t('upgrade.featureAI')}</li>
+                  <li>{t('upgrade.featureHighlights')}</li>
+                  <li>{t('upgrade.featureTools')}</li>
+                  <li>{t('upgrade.featureEarlyAccess')}</li>
                 </ul>
 
                 <button
@@ -85,7 +87,7 @@ export function UpgradeModal() {
                   style={{ width: '100%', marginBottom: 10, position: 'relative' }}
                   onClick={() => openExternal(LEMONSQUEEZY_CHECKOUT_URL)}
                 >
-                  <span>Acheter une licence Pro — 9,99 €</span>
+                  <span>{t('upgrade.buyLicense')}</span>
                 </button>
 
                 <button
@@ -93,26 +95,26 @@ export function UpgradeModal() {
                   style={{ width: '100%', marginBottom: 16 }}
                   onClick={() => openExternal(LEMONSQUEEZY_SUBSCRIPTION_URL)}
                 >
-                  Abonnement : 1 mois — 0,99 €
+                  {t('upgrade.subscription')}
                 </button>
               </div>
 
               <div className="settings-section">
-                <h3 className="settings-section-title">Activer une licence</h3>
+                <h3 className="settings-section-title">{t('upgrade.activateLicense')}</h3>
                 <p className="settings-section-desc" style={{ marginBottom: 12, color: '#ef4444' }}>
-                  Vous devez être connecté à un compte Superflux pour activer votre licence.
+                  {t('upgrade.mustBeLoggedIn')}
                 </p>
 
                 {!user ? (
                   <p className="settings-section-desc" style={{ opacity: 0.7, fontStyle: 'italic' }}>
-                    Connectez-vous depuis les paramètres pour continuer.
+                    {t('auth.loginFromSettings')}
                   </p>
                 ) : (
                   <form onSubmit={handleActivate}>
                     <input
                       type="text"
                       className="provider-input"
-                      placeholder="Collez votre clé de licence..."
+                      placeholder={t('upgrade.pasteKey')}
                       value={key}
                       onChange={(e) => { setKey(e.target.value); setError(null); }}
                       style={{ marginBottom: 8 }}
@@ -135,10 +137,10 @@ export function UpgradeModal() {
                       {loading ? (
                         <>
                           <span className="btn-spinner" />
-                          Vérification...
+                          {t('common.verification')}
                         </>
                       ) : (
-                        'Activer'
+                        t('upgrade.activate')
                       )}
                     </button>
                   </form>
@@ -148,7 +150,7 @@ export function UpgradeModal() {
 
             <div className="modal-actions">
               <button type="button" className="btn-secondary" onClick={handleClose}>
-                Fermer
+                {t('common.close')}
               </button>
             </div>
           </motion.div>

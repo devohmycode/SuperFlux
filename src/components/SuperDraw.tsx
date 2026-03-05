@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type MouseEvent as RMouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DrawDoc } from './DrawFileList';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -134,17 +135,17 @@ function paintSel(ctx: CanvasRenderingContext2D, el: DrawElement, cam: Camera) {
 
 // ─── Tool config ─────────────────────────────────────────────────────
 
-const TOOLS: { tool: Tool; icon: string; label: string; key: string }[] = [
-  { tool: 'hand', icon: '✋', label: 'Déplacer', key: 'h' },
-  { tool: 'select', icon: '⇱', label: 'Sélection', key: 'v' },
-  { tool: 'rect', icon: '▭', label: 'Rectangle', key: 'r' },
-  { tool: 'ellipse', icon: '◯', label: 'Ellipse', key: 'o' },
-  { tool: 'diamond', icon: '◇', label: 'Losange', key: 'd' },
-  { tool: 'line', icon: '╱', label: 'Ligne', key: 'l' },
-  { tool: 'arrow', icon: '→', label: 'Flèche', key: 'a' },
-  { tool: 'freedraw', icon: '✎', label: 'Crayon', key: 'p' },
-  { tool: 'text', icon: 'T', label: 'Texte', key: 't' },
-  { tool: 'eraser', icon: '⌫', label: 'Gomme', key: 'e' },
+const TOOLS: { tool: Tool; icon: string; labelKey: string; key: string }[] = [
+  { tool: 'hand', icon: '✋', labelKey: 'draw.toolHand', key: 'h' },
+  { tool: 'select', icon: '⇱', labelKey: 'draw.toolSelect', key: 'v' },
+  { tool: 'rect', icon: '▭', labelKey: 'draw.toolRect', key: 'r' },
+  { tool: 'ellipse', icon: '◯', labelKey: 'draw.toolEllipse', key: 'o' },
+  { tool: 'diamond', icon: '◇', labelKey: 'draw.toolDiamond', key: 'd' },
+  { tool: 'line', icon: '╱', labelKey: 'draw.toolLine', key: 'l' },
+  { tool: 'arrow', icon: '→', labelKey: 'draw.toolArrow', key: 'a' },
+  { tool: 'freedraw', icon: '✎', labelKey: 'draw.toolFreedraw', key: 'p' },
+  { tool: 'text', icon: 'T', labelKey: 'draw.toolText', key: 't' },
+  { tool: 'eraser', icon: '⌫', labelKey: 'draw.toolEraser', key: 'e' },
 ];
 const COLORS = ['#1e1e1e', '#e03131', '#2f9e44', '#1971c2', '#f08c00', '#9c36b5', '#ffffff', 'transparent'];
 const WIDTHS = [1, 2, 3, 5, 8];
@@ -155,6 +156,7 @@ const FONT_SIZES = [12, 16, 20, 28, 36, 48, 64];
 // ═════════════════════════════════════════════════════════════════════
 
 export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const lastPtr = useRef<[number, number]>([0, 0]);
@@ -491,10 +493,10 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: txtSec }}>
         <span style={{ fontSize: 48 }}>🎨</span>
-        <p style={{ fontSize: 14 }}>Selectionnez ou creez un schema</p>
+        <p style={{ fontSize: 14 }}>{t('draw.selectOrCreate')}</p>
         {onAddDoc && (
           <button onClick={onAddDoc} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${border}`, background: accentBg, color: accent, cursor: 'pointer', fontSize: 13 }}>
-            + Nouveau schema
+            + {t('draw.newSchema')}
           </button>
         )}
       </div>
@@ -506,20 +508,20 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: bg, borderBottom: `1px solid ${border}`, flexShrink: 0, overflowX: 'auto', zIndex: 10 }}>
         <div style={{ display: 'flex', gap: 2 }}>
-          {TOOLS.map(t => (
-            <button key={t.tool} title={`${t.label} (${t.key.toUpperCase()})`} style={toolBtn(tool === t.tool)}
-              onClick={() => { setTool(t.tool); setSel(new Set()); }}>{t.icon}</button>
+          {TOOLS.map(td => (
+            <button key={td.tool} title={`${t(td.labelKey)} (${td.key.toUpperCase()})`} style={toolBtn(tool === td.tool)}
+              onClick={() => { setTool(td.tool); setSel(new Set()); }}>{td.icon}</button>
           ))}
         </div>
         <div style={{ width: 1, height: 28, background: border, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Contour</span>
+          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{t('draw.stroke')}</span>
           <div style={{ display: 'flex', gap: 3 }}>
             {COLORS.filter(c => c !== 'transparent').map(c => (
               <button key={`s-${c}`} onClick={() => setSColor(c)} style={colorBtn(c, sColor === c)} />
             ))}
           </div>
-          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Fond</span>
+          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{t('draw.fill')}</span>
           <div style={{ display: 'flex', gap: 3 }}>
             {COLORS.map(c => (
               <button key={`f-${c}`} onClick={() => setFColor(c)} style={colorBtn(c, fColor === c)} />
@@ -528,7 +530,7 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
         </div>
         <div style={{ width: 1, height: 28, background: border, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Épaisseur</span>
+          <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{t('draw.strokeWidth')}</span>
           <div style={{ display: 'flex', gap: 3 }}>
             {WIDTHS.map(w => (
               <button key={w} onClick={() => setSWidth(w)} style={{ ...toolBtn(sWidth === w), width: 28, height: 28, borderRadius: 5 }}>
@@ -540,7 +542,7 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
         {tool === 'text' && (<>
           <div style={{ width: 1, height: 28, background: border, flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Police</span>
+            <span style={{ fontSize: 10, color: txtDim, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>{t('draw.font')}</span>
             <div style={{ display: 'flex', gap: 3 }}>
               {FONT_SIZES.map(s => (
                 <button key={s} onClick={() => setFontSize(s)}
@@ -553,14 +555,14 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
         </>)}
         <div style={{ width: 1, height: 28, background: border, flexShrink: 0 }} />
         <div style={{ display: 'flex', gap: 2, marginLeft: 'auto' }}>
-          <button onClick={undo} disabled={hIdx <= 0} title="Annuler (Ctrl+Z)" style={actBtn(hIdx <= 0)}>↩</button>
-          <button onClick={redo} disabled={hIdx >= hist.length - 1} title="Rétablir (Ctrl+Y)" style={actBtn(hIdx >= hist.length - 1)}>↪</button>
-          <button onClick={delSel} disabled={sel.size === 0} title="Supprimer" style={actBtn(sel.size === 0)}>🗑</button>
-          <button onClick={dupSel} disabled={sel.size === 0} title="Dupliquer (Ctrl+D)" style={actBtn(sel.size === 0)}>⧉</button>
-          <button onClick={exportPng} title="Exporter PNG" style={actBtn(false)}>📷</button>
-          <button onClick={clearAll} title="Tout effacer" style={actBtn(false)}>🧹</button>
+          <button onClick={undo} disabled={hIdx <= 0} title={`${t('draw.undo')} (Ctrl+Z)`} style={actBtn(hIdx <= 0)}>↩</button>
+          <button onClick={redo} disabled={hIdx >= hist.length - 1} title={`${t('draw.redo')} (Ctrl+Y)`} style={actBtn(hIdx >= hist.length - 1)}>↪</button>
+          <button onClick={delSel} disabled={sel.size === 0} title={t('common.delete')} style={actBtn(sel.size === 0)}>🗑</button>
+          <button onClick={dupSel} disabled={sel.size === 0} title={`${t('draw.duplicate')} (Ctrl+D)`} style={actBtn(sel.size === 0)}>⧉</button>
+          <button onClick={exportPng} title={t('draw.exportPng')} style={actBtn(false)}>📷</button>
+          <button onClick={clearAll} title={t('draw.clearAll')} style={actBtn(false)}>🧹</button>
           <div style={{ width: 1, height: 28, background: border, flexShrink: 0 }} />
-          <button onClick={() => setDark(d => !d)} title={dark ? 'Mode clair' : 'Mode sombre'} style={actBtn(false)}>{dark ? '☀️' : '🌙'}</button>
+          <button onClick={() => setDark(d => !d)} title={dark ? t('draw.lightMode') : t('draw.darkMode')} style={actBtn(false)}>{dark ? '☀️' : '🌙'}</button>
         </div>
       </div>
 
@@ -576,7 +578,7 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
           <textarea
             ref={textAreaRef}
             value={textValue}
-            placeholder="Taper le texte..."
+            placeholder={t('draw.typeText')}
             onChange={e => setTextValue(e.target.value)}
             onKeyDown={e => {
               e.stopPropagation();
@@ -614,7 +616,7 @@ export function SuperDraw({ doc, onUpdateContent, onAddDoc }: SuperDrawProps) {
           <span style={{ fontSize: 12, color: txtSec, minWidth: 36, textAlign: 'center' as const }}>{Math.round(cam.zoom * 100)}%</span>
           <button onClick={() => setCam(p => ({ ...p, zoom: Math.min(10, p.zoom * 1.15) }))}
             style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 5, background: 'transparent', color: txtSec, fontSize: 16, cursor: 'pointer' }}>+</button>
-          <button onClick={() => setCam({ x: 0, y: 0, zoom: 1 })} title="Réinitialiser"
+          <button onClick={() => setCam({ x: 0, y: 0, zoom: 1 })} title={t('draw.reset')}
             style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 5, background: 'transparent', color: txtSec, fontSize: 16, cursor: 'pointer' }}>⊙</button>
         </div>
       </div>

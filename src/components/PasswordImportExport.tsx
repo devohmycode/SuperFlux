@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Upload, Download, FileUp, Shield } from 'lucide-react';
 import { Button } from './ui/button';
@@ -12,14 +13,15 @@ interface PasswordImportExportProps {
 type ImportFormat = 'chrome' | 'bitwarden' | 'firefox' | 'generic';
 type Tab = 'import' | 'export';
 
-const FORMAT_OPTIONS: { value: ImportFormat; label: string; description: string }[] = [
-  { value: 'chrome', label: 'Google Chrome', description: 'Fichier CSV exporté depuis Chrome' },
-  { value: 'bitwarden', label: 'Bitwarden', description: 'Fichier CSV exporté depuis Bitwarden' },
-  { value: 'firefox', label: 'Firefox', description: 'Fichier CSV exporté depuis Firefox' },
-  { value: 'generic', label: 'CSV Générique', description: 'Colonnes : title, url, username, password' },
+const FORMAT_OPTIONS: { value: ImportFormat; label: string; descKey: string; isLabelKey?: boolean }[] = [
+  { value: 'chrome', label: 'Google Chrome', descKey: 'password.csvFromChrome' },
+  { value: 'bitwarden', label: 'Bitwarden', descKey: 'password.csvFromBitwarden' },
+  { value: 'firefox', label: 'Firefox', descKey: 'password.csvFromFirefox' },
+  { value: 'generic', label: 'password.genericCsv', descKey: 'password.csvGenericDesc', isLabelKey: true },
 ];
 
 export function PasswordImportExport({ onClose, onImportDone }: PasswordImportExportProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('import');
   const [format, setFormat] = useState<ImportFormat>('chrome');
   const [loading, setLoading] = useState(false);
@@ -39,15 +41,15 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
     try {
       const text = await file.text();
       const count = await invoke<number>('pw_import_csv', { csvContent: text, format });
-      setSuccess(`${count} entrée${count > 1 ? 's' : ''} importée${count > 1 ? 's' : ''} avec succès.`);
+      setSuccess(t('password.importSuccess', { count }));
       onImportDone();
     } catch (err) {
-      setError(typeof err === 'string' ? err : "Erreur lors de l'import.");
+      setError(typeof err === 'string' ? err : t('password.importError'));
     } finally {
       setLoading(false);
       e.target.value = '';
     }
-  }, [format, onImportDone]);
+  }, [format, onImportDone, t]);
 
   // ── Export CSV ──
   const handleExportCsv = useCallback(async () => {
@@ -63,13 +65,13 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
       a.download = 'superpassword-export.csv';
       a.click();
       URL.revokeObjectURL(url);
-      setSuccess('Export CSV téléchargé.');
+      setSuccess(t('password.exportCsvDownloaded'));
     } catch (err) {
-      setError(typeof err === 'string' ? err : "Erreur lors de l'export.");
+      setError(typeof err === 'string' ? err : t('password.exportError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // ── Export encrypted vault ──
   const handleExportVault = useCallback(async () => {
@@ -88,13 +90,13 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
       a.download = 'superpassword-vault.spvault';
       a.click();
       URL.revokeObjectURL(url);
-      setSuccess('Coffre-fort chiffré exporté.');
+      setSuccess(t('password.vaultExported'));
     } catch (err) {
-      setError(typeof err === 'string' ? err : "Erreur lors de l'export.");
+      setError(typeof err === 'string' ? err : t('password.exportError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // ── Import encrypted vault ──
   const handleImportVault = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,21 +112,21 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const blob64 = btoa(binary);
       await invoke('pw_import_vault_blob', { data: blob64 });
-      setSuccess('Coffre-fort importé avec succès.');
+      setSuccess(t('password.vaultImported'));
       onImportDone();
     } catch (err) {
-      setError(typeof err === 'string' ? err : "Erreur lors de l'import du coffre-fort.");
+      setError(typeof err === 'string' ? err : t('password.vaultImportError'));
     } finally {
       setLoading(false);
       e.target.value = '';
     }
-  }, [onImportDone]);
+  }, [onImportDone, t]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
-        <h2 className="text-sm font-semibold text-[var(--text-primary)]">Import / Export</h2>
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('password.importExport')}</h2>
         <Button variant="ghost" size="icon" onClick={onClose}>
           <X size={16} />
         </Button>
@@ -142,7 +144,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
           onClick={() => { setTab('import'); setError(null); setSuccess(null); }}
         >
           <Upload size={14} className="inline-block mr-1.5 -mt-0.5" />
-          Importer
+          {t('password.import')}
         </button>
         <button
           className={cn(
@@ -154,7 +156,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
           onClick={() => { setTab('export'); setError(null); setSuccess(null); }}
         >
           <Download size={14} className="inline-block mr-1.5 -mt-0.5" />
-          Exporter
+          {t('password.export')}
         </button>
       </div>
 
@@ -165,12 +167,12 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
             {/* CSV Import */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-                Importer depuis un CSV
+                {t('password.importFromCsv')}
               </h3>
 
               {/* Format selector */}
               <div className="space-y-1.5">
-                <label className="text-xs text-[var(--text-secondary)]">Format source</label>
+                <label className="text-xs text-[var(--text-secondary)]">{t('password.sourceFormat')}</label>
                 <div className="grid gap-2">
                   {FORMAT_OPTIONS.map((opt) => (
                     <label
@@ -191,8 +193,8 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
                         className="mt-0.5 accent-[var(--accent)]"
                       />
                       <div>
-                        <div className="text-sm text-[var(--text-primary)]">{opt.label}</div>
-                        <div className="text-xs text-[var(--text-tertiary)]">{opt.description}</div>
+                        <div className="text-sm text-[var(--text-primary)]">{opt.isLabelKey ? t(opt.label) : opt.label}</div>
+                        <div className="text-xs text-[var(--text-tertiary)]">{t(opt.descKey)}</div>
                       </div>
                     </label>
                   ))}
@@ -213,7 +215,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
                 disabled={loading}
               >
                 <FileUp size={16} />
-                {loading ? 'Import en cours...' : 'Choisir un fichier CSV'}
+                {loading ? t('password.importing') : t('password.chooseCsvFile')}
               </Button>
             </div>
 
@@ -223,10 +225,10 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
             {/* Vault Import */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-                Importer un coffre-fort chiffré
+                {t('password.importEncryptedVault')}
               </h3>
               <p className="text-xs text-[var(--text-tertiary)]">
-                Importez un fichier .spvault exporté depuis SuperPassword.
+                {t('password.importVaultDesc')}
               </p>
               <input
                 ref={vaultInputRef}
@@ -242,7 +244,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
                 disabled={loading}
               >
                 <Shield size={16} />
-                {loading ? 'Import en cours...' : 'Choisir un fichier .spvault'}
+                {loading ? t('password.importing') : t('password.chooseSpvaultFile')}
               </Button>
             </div>
           </>
@@ -253,10 +255,10 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
             {/* CSV Export */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-                Exporter en CSV
+                {t('password.exportCsv')}
               </h3>
               <p className="text-xs text-[var(--text-tertiary)]">
-                Exporte tous vos identifiants en texte clair. Utilisez avec prudence.
+                {t('password.exportCsvDesc')}
               </p>
               <Button
                 variant="outline"
@@ -265,7 +267,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
                 disabled={loading}
               >
                 <Download size={16} />
-                {loading ? 'Export en cours...' : 'Télécharger le CSV'}
+                {loading ? t('password.exporting') : t('password.downloadCsv')}
               </Button>
             </div>
 
@@ -275,10 +277,10 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
             {/* Encrypted Export */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-[var(--text-primary)] uppercase tracking-wider">
-                Exporter le coffre-fort chiffré
+                {t('password.exportEncryptedVault')}
               </h3>
               <p className="text-xs text-[var(--text-tertiary)]">
-                Crée une sauvegarde chiffrée compatible avec SuperPassword.
+                {t('password.exportVaultDesc')}
               </p>
               <Button
                 variant="outline"
@@ -287,7 +289,7 @@ export function PasswordImportExport({ onClose, onImportDone }: PasswordImportEx
                 disabled={loading}
               >
                 <Shield size={16} />
-                {loading ? 'Export en cours...' : 'Télécharger le coffre-fort chiffré'}
+                {loading ? t('password.exporting') : t('password.downloadEncryptedVault')}
               </Button>
             </div>
           </>

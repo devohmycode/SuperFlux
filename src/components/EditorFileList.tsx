@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface EditorDoc {
@@ -73,6 +74,7 @@ export function EditorFileList({
   onDeleteFolder,
   onMoveDocToFolder,
 }: EditorFileListProps) {
+  const { t } = useTranslation();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(folders));
   const [newFolderInput, setNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -181,7 +183,7 @@ export function EditorFileList({
       ) : (
         <>
           <span className="nsrc-note-icon">📄</span>
-          <span className="nsrc-note-title">{doc.title || 'Sans titre'}</span>
+          <span className="nsrc-note-title">{doc.title || t('common.untitled')}</span>
         </>
       )}
     </div>
@@ -195,7 +197,7 @@ export function EditorFileList({
         onClick={() => onSelectFolder(null)}
       >
         <span className="source-all-icon">📄</span>
-        <span className="source-all-label">Tous les documents</span>
+        <span className="source-all-label">{t('editor.allDocuments')}</span>
         <span className="source-all-count">{docs.length}</span>
       </button>
 
@@ -203,10 +205,10 @@ export function EditorFileList({
       <button
         className="nsrc-add-folder-btn"
         onClick={onAddDoc}
-        title="Nouveau document"
+        title={t('editor.newDocument')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau document</span>
+        <span className="nsrc-add-folder-label">{t('editor.newDocument')}</span>
       </button>
 
       {/* New folder button */}
@@ -216,10 +218,10 @@ export function EditorFileList({
           setNewFolderInput(true);
           setTimeout(() => newFolderRef.current?.focus(), 50);
         }}
-        title="Nouveau dossier"
+        title={t('common.newFolder')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau dossier</span>
+        <span className="nsrc-add-folder-label">{t('common.newFolder')}</span>
       </button>
 
       {/* New folder input */}
@@ -242,7 +244,7 @@ export function EditorFileList({
                 if (e.key === 'Escape') { setNewFolderInput(false); setNewFolderName(''); }
               }}
               onBlur={handleCreateFolder}
-              placeholder="Nom du dossier"
+              placeholder={t('common.folderName')}
             />
           </motion.div>
         )}
@@ -309,7 +311,7 @@ export function EditorFileList({
                 >
                   {folderDocs.map(renderDocItem)}
                   {folderDocs.length === 0 && (
-                    <div className="nsrc-folder-empty">Dossier vide</div>
+                    <div className="nsrc-folder-empty">{t('editor.emptyFolder')}</div>
                   )}
                 </motion.div>
               )}
@@ -321,7 +323,7 @@ export function EditorFileList({
       {/* Empty state */}
       {docs.length === 0 && folders.length === 0 && (
         <div className="editor-filelist-empty">
-          Aucun document
+          {t('editor.noDocuments')}
         </div>
       )}
 
@@ -346,7 +348,7 @@ export function EditorFileList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
 
           {folders.length > 0 && (
@@ -356,7 +358,7 @@ export function EditorFileList({
                 onMouseEnter={() => setMoveSubmenuOpen(true)}
               >
                 <span className="feed-context-menu-icon">→</span>
-                Déplacer vers
+                {t('editor.moveTo')}
                 <span className="feed-context-menu-arrow">›</span>
               </button>
 
@@ -370,7 +372,7 @@ export function EditorFileList({
                         closeContextMenu();
                       }}
                     >
-                      Hors dossier
+                      {t('editor.outOfFolder')}
                     </button>
                   )}
                   {folders
@@ -401,7 +403,7 @@ export function EditorFileList({
               }}
             >
               <span className="feed-context-menu-icon">→</span>
-              Retirer du dossier
+              {t('editor.removeFromFolder')}
             </button>
           )}
 
@@ -413,7 +415,7 @@ export function EditorFileList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}
@@ -435,7 +437,7 @@ export function EditorFileList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
           <button
             className="feed-context-menu-item feed-context-menu-item--danger"
@@ -445,7 +447,7 @@ export function EditorFileList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}

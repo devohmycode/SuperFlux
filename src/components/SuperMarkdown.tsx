@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { MarkdownCodeEditor } from './MarkdownCodeEditor';
 import { MarkdownSidebar } from './MarkdownSidebar';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
+  const { t } = useTranslation();
   // Vault state
   const [vaultPath, setVaultPath] = useState<string | null>(() => localStorage.getItem(VAULT_PATH_KEY));
   const [fileTree, setFileTree] = useState<MdFileEntry[]>([]);
@@ -181,7 +183,7 @@ export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
   // File operations
   const handleCreateFile = useCallback(async (parentPath: string) => {
     if (!vaultPath) return;
-    const name = prompt('File name (e.g. note.md):');
+    const name = prompt(t('markdown.fileNamePrompt'));
     if (!name) return;
     const relativePath = parentPath === vaultPath ? name : `${parentPath.replace(vaultPath, '').replace(/^[/\\]/, '')}/${name}`;
     try {
@@ -193,7 +195,7 @@ export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
 
   const handleCreateFolder = useCallback(async (parentPath: string) => {
     if (!vaultPath) return;
-    const name = prompt('Folder name:');
+    const name = prompt(t('markdown.folderNamePrompt'));
     if (!name) return;
     const relativePath = parentPath === vaultPath ? name : `${parentPath.replace(vaultPath, '').replace(/^[/\\]/, '')}/${name}`;
     try {
@@ -204,7 +206,7 @@ export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
 
   const handleDeleteEntry = useCallback(async (path: string) => {
     const name = path.split(/[/\\]/).pop() || path;
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!confirm(t('markdown.confirmDelete', { name }))) return;
     try {
       await invoke('md_delete_entry', { filePath: path });
       // Close tab if open
@@ -216,7 +218,7 @@ export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
 
   const handleRenameEntry = useCallback(async (path: string) => {
     const oldName = path.split(/[/\\]/).pop() || '';
-    const newName = prompt('New name:', oldName);
+    const newName = prompt(t('markdown.newNamePrompt'), oldName);
     if (!newName || newName === oldName) return;
     try {
       const newPath = await invoke<string>('md_rename_entry', { oldPath: path, newName });
@@ -315,15 +317,15 @@ export function SuperMarkdown({ searchQuery: _searchQuery }: Props) {
               {vaultPath ? (
                 <div className="md-welcome-content">
                   <h2>SuperMarkdown</h2>
-                  <p>Select a file from the sidebar or create a new one</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Ctrl+P to open command palette</p>
+                  <p>{t('markdown.selectFileOrCreate')}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{t('markdown.ctrlPHint')}</p>
                 </div>
               ) : (
                 <div className="md-welcome-content">
                   <h2>SuperMarkdown</h2>
-                  <p>Open a vault folder to get started</p>
+                  <p>{t('markdown.openVaultToStart')}</p>
                   <button className="md-btn md-btn-primary" onClick={handleSelectVault}>
-                    Open Vault
+                    {t('markdown.openVault')}
                   </button>
                 </div>
               )}

@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import type { ClipEntry } from './ClipboardHistoryList';
 
 interface SuperClipboardProps {
@@ -20,7 +22,7 @@ interface Group {
   items: ClipEntry[];
 }
 
-function groupEntries(entries: ClipEntry[]): Group[] {
+function groupEntries(entries: ClipEntry[], t: (key: string) => string): Group[] {
   const now = Date.now();
   const MINUTE = 60_000;
   const HOUR = 60 * MINUTE;
@@ -38,10 +40,10 @@ function groupEntries(entries: ClipEntry[]): Group[] {
     }
     const age = now - e.timestamp;
     let label: string;
-    if (age < HOUR) label = 'Dernière heure';
-    else if (age < DAY) label = "Aujourd'hui";
-    else if (age < WEEK) label = 'Cette semaine';
-    else label = 'Plus ancien';
+    if (age < HOUR) label = t('clipboard.lastHour');
+    else if (age < DAY) label = t('common.today');
+    else if (age < WEEK) label = t('clipboard.thisWeek');
+    else label = t('common.older');
 
     if (!map[label]) {
       map[label] = [];
@@ -51,7 +53,7 @@ function groupEntries(entries: ClipEntry[]): Group[] {
   }
 
   const groups: Group[] = [];
-  if (pinned.length > 0) groups.push({ label: '📌 Épinglés', items: pinned });
+  if (pinned.length > 0) groups.push({ label: `📌 ${t('clipboard.pinned')}`, items: pinned });
   for (const label of order) groups.push({ label, items: map[label] });
   return groups;
 }
@@ -74,6 +76,7 @@ export function SuperClipboard({
   onConvertToNote,
   searchQuery,
 }: SuperClipboardProps) {
+  const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
   const [capturing, setCapturing] = useState(false);
@@ -97,7 +100,7 @@ export function SuperClipboard({
     [entries, sq]
   );
 
-  const groups = useMemo(() => groupEntries(filtered), [filtered]);
+  const groups = useMemo(() => groupEntries(filtered, t), [filtered, t]);
 
   // Reset capture state when selected entry changes
   useEffect(() => {
@@ -145,7 +148,7 @@ export function SuperClipboard({
       setShortcutError(null);
 
       onSetShortcut(entry.id, shortcutStr).catch((err: unknown) => {
-        setShortcutError(typeof err === 'string' ? err : (err as Error).message || 'Erreur');
+        setShortcutError(typeof err === 'string' ? err : (err as Error).message || t('common.error'));
       });
     };
 
@@ -192,8 +195,8 @@ export function SuperClipboard({
     return (
       <div className="sc-empty-state">
         <span className="sc-empty-icon">📋</span>
-        <p>{searchQuery ? 'Aucun clip trouvé' : 'Historique du presse-papier vide'}</p>
-        <p className="sc-empty-hint">Copiez du texte dans n'importe quelle application pour le voir apparaitre ici.</p>
+        <p>{searchQuery ? t('clipboard.noClipFound') : t('clipboard.emptyHistory')}</p>
+        <p className="sc-empty-hint">{t('clipboard.copyHint')}</p>
       </div>
     );
   }
@@ -234,7 +237,7 @@ export function SuperClipboard({
                     </span>
                   )}
                   <span className="sc-clip-time">
-                    {new Date(c.timestamp).toLocaleTimeString('fr-FR', {
+                    {new Date(c.timestamp).toLocaleTimeString(i18n.language === 'fr' ? 'fr-FR' : 'en-US', {
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
@@ -254,7 +257,7 @@ export function SuperClipboard({
 
             {/* Shortcut section */}
             <div className="sc-shortcut-section">
-              <div className="se-info-header">Raccourci global</div>
+              <div className="se-info-header">{t('clipboard.globalShortcut')}</div>
               {entry.shortcut ? (
                 <div className="sc-shortcut-display">
                   <div className="sc-shortcut-keys">
@@ -266,7 +269,7 @@ export function SuperClipboard({
                     className="sc-action-btn sc-action-btn--danger sc-shortcut-remove"
                     onClick={() => onRemoveShortcut(entry.id)}
                   >
-                    Supprimer
+                    {t('common.delete')}
                   </button>
                 </div>
               ) : capturing ? (
@@ -275,58 +278,58 @@ export function SuperClipboard({
                     {capturedParts.length > 0 ? (
                       capturedParts.map((k, i) => <kbd key={i} className="se-kbd">{k}</kbd>)
                     ) : (
-                      <span className="sc-shortcut-hint">Appuyez sur une combinaison de touches...</span>
+                      <span className="sc-shortcut-hint">{t('clipboard.pressKeyCombination')}</span>
                     )}
                   </div>
                   <button className="sc-action-btn" onClick={() => { setCapturing(false); setCapturedParts([]); }}>
-                    Annuler
+                    {t('common.cancel')}
                   </button>
                 </div>
               ) : (
                 <button className="sc-action-btn sc-shortcut-assign" onClick={() => { setCapturing(true); setShortcutError(null); }}>
-                  ⌨ Assigner un raccourci
+                  ⌨ {t('clipboard.assignShortcut')}
                 </button>
               )}
               {shortcutError && <p className="sc-shortcut-error">{shortcutError}</p>}
             </div>
 
             <div className="sc-info-section">
-              <div className="se-info-header">Information</div>
+              <div className="se-info-header">{t('clipboard.information')}</div>
               <div className="se-info-rows">
                 <div className="se-info-row">
-                  <span className="se-info-label">Taille</span>
-                  <span className="se-info-value">{entry.content.length} caractères</span>
+                  <span className="se-info-label">{t('clipboard.size')}</span>
+                  <span className="se-info-value">{entry.content.length} {t('clipboard.characters')}</span>
                 </div>
                 <div className="se-info-row">
-                  <span className="se-info-label">Lignes</span>
+                  <span className="se-info-label">{t('clipboard.lines')}</span>
                   <span className="se-info-value">{entry.content.split('\n').length}</span>
                 </div>
                 <div className="se-info-row">
-                  <span className="se-info-label">Copié le</span>
+                  <span className="se-info-label">{t('clipboard.copiedOn')}</span>
                   <span className="se-info-value">
-                    {new Date(entry.timestamp).toLocaleString('fr-FR')}
+                    {new Date(entry.timestamp).toLocaleString(i18n.language === 'fr' ? 'fr-FR' : 'en-US')}
                   </span>
                 </div>
                 <div className="se-info-row">
-                  <span className="se-info-label">Épinglé</span>
-                  <span className="se-info-value">{entry.pinned ? 'Oui' : 'Non'}</span>
+                  <span className="se-info-label">{t('clipboard.pinned')}</span>
+                  <span className="se-info-value">{entry.pinned ? t('clipboard.yes') : t('clipboard.no')}</span>
                 </div>
               </div>
             </div>
             <div className="sc-actions">
-              <button className="sc-action-btn" onClick={() => onPasteEntry(entry.id)} title="Re-copier dans le presse-papier">
-                📋 Copier
+              <button className="sc-action-btn" onClick={() => onPasteEntry(entry.id)} title={t('clipboard.recopyToClipboard')}>
+                📋 {t('clipboard.copy')}
               </button>
-              <button className="sc-action-btn" onClick={() => onTogglePin(entry.id)} title={entry.pinned ? 'Désépingler' : 'Épingler'}>
-                📌 {entry.pinned ? 'Désépingler' : 'Épingler'}
+              <button className="sc-action-btn" onClick={() => onTogglePin(entry.id)} title={entry.pinned ? t('clipboard.unpin') : t('clipboard.pin')}>
+                📌 {entry.pinned ? t('clipboard.unpin') : t('clipboard.pin')}
               </button>
               {onConvertToNote && (
-                <button className="sc-action-btn" onClick={() => onConvertToNote(entry.content)} title="Convertir en note">
-                  📝 Note
+                <button className="sc-action-btn" onClick={() => onConvertToNote(entry.content)} title={t('clipboard.convertToNote')}>
+                  📝 {t('clipboard.note')}
                 </button>
               )}
-              <button className="sc-action-btn sc-action-btn--danger" onClick={() => onDeleteEntry(entry.id)} title="Supprimer">
-                🗑 Supprimer
+              <button className="sc-action-btn sc-action-btn--danger" onClick={() => onDeleteEntry(entry.id)} title={t('common.delete')}>
+                🗑 {t('common.delete')}
               </button>
             </div>
           </div>
@@ -338,28 +341,28 @@ export function SuperClipboard({
         <div className="se-footer-left">
           <span>📋</span>
           <span>Clipboard</span>
-          <span className="sc-count">{entries.length} clips</span>
+          <span className="sc-count">{entries.length} {t('clipboard.clips')}</span>
         </div>
         <div className="se-footer-right">
           <div className="se-footer-action">
-            <span>Copier</span>
+            <span>{t('clipboard.copy')}</span>
             <kbd className="se-kbd">&#9166;</kbd>
           </div>
           <div className="se-footer-sep" />
           <div className="se-footer-action">
-            <span>Épingler</span>
+            <span>{t('clipboard.pin')}</span>
             <kbd className="se-kbd">Ctrl</kbd>
             <kbd className="se-kbd">P</kbd>
           </div>
           <div className="se-footer-sep" />
           <div className="se-footer-action">
-            <span>Supprimer</span>
+            <span>{t('common.delete')}</span>
             <kbd className="se-kbd">Shift</kbd>
             <kbd className="se-kbd">Del</kbd>
           </div>
           <div className="se-footer-sep" />
-          <button className="sc-clear-btn" onClick={onClearAll} title="Tout effacer (sauf épinglés)">
-            Tout effacer
+          <button className="sc-clear-btn" onClick={onClearAll} title={t('clipboard.clearAllExceptPinned')}>
+            {t('clipboard.clearAll')}
           </button>
         </div>
       </div>
@@ -372,18 +375,18 @@ export function SuperClipboard({
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
         >
           <button className="feed-context-menu-item" onClick={() => { onPasteEntry(ctxMenu.entry.id); setCtxMenu(null); }}>
-            <span>📋</span> Re-copier
+            <span>📋</span> {t('clipboard.recopy')}
           </button>
           <button className="feed-context-menu-item" onClick={() => { onTogglePin(ctxMenu.entry.id); setCtxMenu(null); }}>
-            <span>📌</span> {ctxMenu.entry.pinned ? 'Désépingler' : 'Épingler'}
+            <span>📌</span> {ctxMenu.entry.pinned ? t('clipboard.unpin') : t('clipboard.pin')}
           </button>
           {onConvertToNote && (
             <button className="feed-context-menu-item" onClick={() => { onConvertToNote(ctxMenu.entry.content); setCtxMenu(null); }}>
-              <span>📝</span> Convertir en note
+              <span>📝</span> {t('clipboard.convertToNote')}
             </button>
           )}
           <button className="feed-context-menu-item feed-context-menu-item--danger" onClick={() => { onDeleteEntry(ctxMenu.entry.id); setCtxMenu(null); }}>
-            <span>🗑</span> Supprimer
+            <span>🗑</span> {t('common.delete')}
           </button>
         </div>
       )}

@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n, { setLanguage, getLanguage } from '../i18n';
 import { motion, AnimatePresence } from 'motion/react';
 import { invoke } from '@tauri-apps/api/core';
 import type { FeedSource } from '../types';
@@ -19,17 +21,17 @@ const SYNC_INTERVAL_KEY = 'superflux_sync_interval';
 const DEFAULT_SYNC_INTERVAL = 5 * 60 * 1000;
 
 const SYNC_OPTIONS = [
-  { value: 1 * 60 * 1000, label: '1 minute' },
-  { value: 3 * 60 * 1000, label: '3 minutes' },
-  { value: 5 * 60 * 1000, label: '5 minutes' },
-  { value: 10 * 60 * 1000, label: '10 minutes' },
-  { value: 15 * 60 * 1000, label: '15 minutes' },
-  { value: 30 * 60 * 1000, label: '30 minutes' },
-  { value: 45 * 60 * 1000, label: '45 minutes' },
-  { value: 60 * 60 * 1000, label: '1 heure' },
-  { value: 3 * 60 * 60 * 1000, label: '3 heures' },
-  { value: 6 * 60 * 60 * 1000, label: '6 heures' },
-  { value: 12 * 60 * 60 * 1000, label: '12 heures' },
+  { value: 1 * 60 * 1000, labelKey: 'settings.oneMinute' },
+  { value: 3 * 60 * 1000, labelKey: 'settings.threeMinutes' },
+  { value: 5 * 60 * 1000, labelKey: 'settings.fiveMinutes' },
+  { value: 10 * 60 * 1000, labelKey: 'settings.tenMinutes' },
+  { value: 15 * 60 * 1000, labelKey: 'settings.fifteenMinutes' },
+  { value: 30 * 60 * 1000, labelKey: 'settings.thirtyMinutes' },
+  { value: 45 * 60 * 1000, labelKey: 'settings.fortyFiveMinutes' },
+  { value: 60 * 60 * 1000, labelKey: 'settings.oneHour' },
+  { value: 3 * 60 * 60 * 1000, labelKey: 'settings.threeHours' },
+  { value: 6 * 60 * 60 * 1000, labelKey: 'settings.sixHours' },
+  { value: 12 * 60 * 60 * 1000, labelKey: 'settings.twelveHours' },
 ] as const;
 
 interface SettingsModalProps {
@@ -106,7 +108,7 @@ function parseOpml(xmlString: string): OpmlFeed[] {
 
   const parseError = doc.querySelector('parsererror');
   if (parseError) {
-    throw new Error('Fichier OPML invalide');
+    throw new Error(i18n.t('settings.invalidOpml'));
   }
 
   const feeds: OpmlFeed[] = [];
@@ -135,6 +137,7 @@ function parseOpml(xmlString: string): OpmlFeed[] {
 }
 
 export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, onSyncIntervalChange, onShowSysInfoChange, showSysInfo = true }: SettingsModalProps) {
+  const { t } = useTranslation();
   const { user, signOut, isConfigured } = useAuth();
   const { isPro, deactivateLicense, showUpgradeModal } = usePro();
 
@@ -175,12 +178,12 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
   // ── Retention state ──
   const RETENTION_KEY = 'superflux_retention_days';
   const RETENTION_OPTIONS = [
-    { value: 0, label: 'Désactivé' },
-    { value: 30, label: '30 jours' },
-    { value: 60, label: '60 jours' },
-    { value: 90, label: '90 jours' },
-    { value: 180, label: '180 jours' },
-    { value: 365, label: '365 jours' },
+    { value: 0, labelKey: 'settings.disabled' },
+    { value: 30, labelKey: 'settings.thirtyDays' },
+    { value: 60, labelKey: 'settings.sixtyDays' },
+    { value: 90, labelKey: 'settings.ninetyDays' },
+    { value: 180, labelKey: 'settings.oneEightyDays' },
+    { value: 365, labelKey: 'settings.threeSixtyFiveDays' },
   ] as const;
   const [retentionDays, setRetentionDays] = useState(() => {
     try {
@@ -241,7 +244,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
       try {
         const json = JSON.parse(reader.result as string);
         if (!json.version || !json.data || typeof json.data !== 'object') {
-          alert('Fichier invalide : format non reconnu.');
+          alert(t('settings.invalidFileFormat'));
           return;
         }
         for (const [key, value] of Object.entries(json.data)) {
@@ -249,7 +252,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
         }
         window.location.reload();
       } catch {
-        alert('Erreur lors de la lecture du fichier JSON.');
+        alert(t('settings.jsonReadError'));
       }
     };
     reader.readAsText(file);
@@ -277,7 +280,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
     setTtsTestStatus('playing');
     setTtsError(null);
     try {
-      await ttsSpeak('Bonjour, ceci est un test de lecture vocale.', () => setTtsTestStatus('idle'));
+      await ttsSpeak(t('settings.ttsTestSentence'), () => setTtsTestStatus('idle'));
     } catch (e) {
       setTtsTestStatus('idle');
       setTtsError(e instanceof Error ? e.message : String(e));
@@ -348,7 +351,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
       setLlmConfig(updated);
       saveLLMConfig(updated);
     } catch (e) {
-      setPullError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setPullError(e instanceof Error ? e.message : t('common.unknownError'));
       setPullState('error');
     }
   }, [llmConfig]);
@@ -391,9 +394,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
       saveProviderConfig(config);
       setProviderConfig(config);
       const added = await ProviderSyncService.importFeeds(config);
-      setProviderImportStatus(`${added} flux importé${added > 1 ? 's' : ''} avec succès`);
+      setProviderImportStatus(t('settings.feedsImported', { count: added }));
     } catch (e) {
-      setProviderImportStatus(`Erreur : ${e instanceof Error ? e.message : 'inconnue'}`);
+      setProviderImportStatus(`${t('common.error')} : ${e instanceof Error ? e.message : t('common.unknownError')}`);
     } finally {
       setProviderImporting(false);
     }
@@ -437,7 +440,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
     setImportResult(null);
 
     if (!file.name.endsWith('.opml') && !file.name.endsWith('.xml')) {
-      setError('Format non supporté. Utilisez un fichier .opml ou .xml');
+      setError(t('settings.unsupportedFormat'));
       return;
     }
 
@@ -446,7 +449,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
       const opmlFeeds = parseOpml(text);
 
       if (opmlFeeds.length === 0) {
-        setError('Aucun flux trouvé dans le fichier OPML');
+        setError(t('settings.noFeedsInOpml'));
         return;
       }
 
@@ -469,7 +472,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
         total: feedsToImport.length,
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur lors de la lecture du fichier');
+      setError(e instanceof Error ? e.message : t('settings.fileReadError'));
     }
   };
 
@@ -528,37 +531,37 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className="modal-header">
-              <h2 className="modal-title">Paramètres</h2>
+              <h2 className="modal-title">{t('common.settings')}</h2>
               <button className="modal-close" onClick={handleClose}>×</button>
             </div>
 
             <div className="settings-body">
               {isConfigured && (
                 <div className="settings-section">
-                  <h3 className="settings-section-title">Compte</h3>
+                  <h3 className="settings-section-title">{t('settings.account')}</h3>
                   {user ? (
                     <div className="settings-account">
                       <div className="settings-account-info">
                         <span className="settings-account-email">{user.email}</span>
-                        <span className="settings-account-status">Connecté — synchronisation cloud active</span>
+                        <span className="settings-account-status">{t('settings.connectedCloudSync')}</span>
                       </div>
                       <button
                         className="btn-secondary"
                         onClick={() => { signOut(); }}
                       >
-                        Se déconnecter
+                        {t('settings.signOut')}
                       </button>
                     </div>
                   ) : (
                     <div className="settings-account">
                       <p className="settings-section-desc">
-                        Connectez-vous pour synchroniser vos flux et préférences entre appareils.
+                        {t('settings.signInDesc')}
                       </p>
                       <button
                         className="btn-primary"
                         onClick={() => setAuthOpen(true)}
                       >
-                        Se connecter
+                        {t('settings.signIn')}
                       </button>
                     </div>
                   )}
@@ -573,41 +576,61 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     <div className="settings-account-info">
                       <div className="settings-ollama-status">
                         <span className="ollama-status-dot connected" />
-                        <span className="ollama-status-text">Pro actif</span>
+                        <span className="ollama-status-text">{t('settings.proActive')}</span>
                       </div>
                     </div>
                     <button className="btn-secondary" onClick={handleProDeactivate}>
-                      Désactiver
+                      {t('settings.deactivate')}
                     </button>
                   </div>
                 ) : (
                   <>
                     <p className="settings-section-desc">
-                      Débloquez les résumés IA, plus de 50 flux et plus de 10 dossiers.
+                      {t('settings.proDesc')}
                     </p>
                     <div className="provider-actions" style={{ marginTop: 8 }}>
                       <button
                         className="btn-primary"
                         onClick={showUpgradeModal}
                       >
-                        Passer à Pro
+                        {t('settings.upgradeToPro')}
                       </button>
                     </div>
                   </>
                 )}
               </div>
 
-              {/* ── Apparence ── */}
+              {/* ── Langue ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Apparence</h3>
-                <p className="settings-section-desc">
-                  Personnalisez l'effet de fenêtre et la transparence de l'interface.
-                </p>
-
-                <label className="settings-label">Effet de fenêtre</label>
+                <h3 className="settings-section-title">{t('settings.language')}</h3>
+                <p className="settings-section-desc">{t('settings.languageDesc')}</p>
                 <div className="settings-format-toggle">
                   {([
-                    ['none', 'Aucun'],
+                    ['en', 'English'],
+                    ['fr', 'Français'],
+                  ] as [string, string][]).map(([code, label]) => (
+                    <button
+                      key={code}
+                      className={`format-option ${getLanguage() === code ? 'active' : ''}`}
+                      onClick={() => setLanguage(code)}
+                    >
+                      <span className="format-option-label">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Apparence ── */}
+              <div className="settings-section">
+                <h3 className="settings-section-title">{t('settings.appearance')}</h3>
+                <p className="settings-section-desc">
+                  {t('settings.appearanceDesc')}
+                </p>
+
+                <label className="settings-label">{t('settings.windowEffect')}</label>
+                <div className="settings-format-toggle">
+                  {([
+                    ['none', t('settings.none')],
                     ['mica', 'Mica'],
                     ['acrylic', 'Acrylic'],
                     ['blur', 'Blur'],
@@ -626,7 +649,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                 {windowEffect !== 'none' && (
                   <>
                     <label className="settings-label" style={{ marginTop: 12 }}>
-                      Opacité du fond
+                      {t('settings.backgroundOpacity')}
                     </label>
                     <div className="settings-opacity-slider">
                       <input
@@ -641,34 +664,34 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   </>
                 )}
 
-                <label className="settings-label" style={{ marginTop: 12 }}>Palette de couleurs</label>
+                <label className="settings-label" style={{ marginTop: 12 }}>{t('settings.colorPalette')}</label>
                 <PalettePickerInline />
 
-                <label className="settings-label" style={{ marginTop: 12 }}>Infos système dans la barre de titre</label>
+                <label className="settings-label" style={{ marginTop: 12 }}>{t('settings.sysInfoTitleBar')}</label>
                 <div className="settings-format-toggle">
                   <button
                     className={`format-option ${showSysInfo ? 'active' : ''}`}
                     onClick={() => onShowSysInfoChange?.(true)}
                   >
-                    <span className="format-option-label">Activé</span>
+                    <span className="format-option-label">{t('settings.enabled')}</span>
                   </button>
                   <button
                     className={`format-option ${!showSysInfo ? 'active' : ''}`}
                     onClick={() => onShowSysInfoChange?.(false)}
                   >
-                    <span className="format-option-label">Désactivé</span>
+                    <span className="format-option-label">{t('settings.disabled')}</span>
                   </button>
                 </div>
               </div>
 
               {/* ── Synchronisation ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Synchronisation</h3>
+                <h3 className="settings-section-title">{t('settings.synchronization')}</h3>
                 <p className="settings-section-desc">
-                  Fréquence de mise à jour automatique de tous les flux.
+                  {t('settings.syncDesc')}
                 </p>
 
-                <label className="settings-label">Intervalle de synchronisation</label>
+                <label className="settings-label">{t('settings.syncInterval')}</label>
                 <select
                   className="provider-input"
                   value={syncIntervalMs}
@@ -680,16 +703,16 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   }}
                 >
                   {SYNC_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
                   ))}
                 </select>
               </div>
 
               {/* ── Stockage ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Stockage</h3>
+                <h3 className="settings-section-title">{t('settings.storage')}</h3>
                 <p className="settings-section-desc">
-                  Choisissez où vos données sont enregistrées.
+                  {t('settings.storageDesc')}
                 </p>
 
                 <div className="settings-format-toggle">
@@ -711,17 +734,17 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
                 <p className="settings-section-desc" style={{ marginTop: 8, fontSize: '11px', opacity: 0.7 }}>
                   {storageMode === 'cloud'
-                    ? 'Données synchronisées avec le cloud.'
-                    : 'Données sur cet appareil uniquement.'}
+                    ? t('settings.dataCloudSync')
+                    : t('settings.dataLocalOnly')}
                 </p>
 
                 {storageMode === 'local' && (
                   <div className="provider-actions" style={{ marginTop: 8, gap: 8 }}>
                     <button className="btn-secondary" onClick={handleExportData}>
-                      Exporter (JSON)
+                      {t('settings.exportJson')}
                     </button>
                     <button className="btn-secondary" onClick={() => importDataRef.current?.click()}>
-                      Importer (JSON)
+                      {t('settings.importJson')}
                     </button>
                     <input
                       ref={importDataRef}
@@ -736,12 +759,12 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
               {/* ── Nettoyage ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Nettoyage</h3>
+                <h3 className="settings-section-title">{t('settings.cleanup')}</h3>
                 <p className="settings-section-desc">
-                  Supprime automatiquement les articles lus plus anciens que la durée choisie. Les favoris, marque-pages et non-lus sont toujours conservés.
+                  {t('settings.cleanupDesc')}
                 </p>
 
-                <label className="settings-label">Rétention des articles</label>
+                <label className="settings-label">{t('settings.articleRetention')}</label>
                 <select
                   className="provider-input"
                   value={retentionDays}
@@ -752,19 +775,19 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   }}
                 >
                   {RETENTION_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
                   ))}
                 </select>
               </div>
 
               {/* ── Notifications ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Notifications</h3>
+                <h3 className="settings-section-title">{t('settings.notifications')}</h3>
                 <p className="settings-section-desc">
-                  Affiche une notification native lorsqu'un flux avec les notifications activées reçoit de nouveaux articles.
+                  {t('settings.notificationsDesc')}
                 </p>
 
-                <label className="settings-label">Notifications globales</label>
+                <label className="settings-label">{t('settings.globalNotifications')}</label>
                 <div className="settings-format-toggle">
                   <button
                     className={`format-option ${notificationsEnabled ? 'active' : ''}`}
@@ -773,7 +796,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       localStorage.setItem(NOTIF_KEY, 'true');
                     }}
                   >
-                    <span className="format-option-label">Activé</span>
+                    <span className="format-option-label">{t('settings.enabled')}</span>
                   </button>
                   <button
                     className={`format-option ${!notificationsEnabled ? 'active' : ''}`}
@@ -782,11 +805,11 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       localStorage.setItem(NOTIF_KEY, 'false');
                     }}
                   >
-                    <span className="format-option-label">Désactivé</span>
+                    <span className="format-option-label">{t('settings.disabled')}</span>
                   </button>
                 </div>
                 <p className="settings-section-desc" style={{ marginTop: 8, fontSize: '11px', opacity: 0.7 }}>
-                  Activez ensuite les notifications par flux via le clic droit sur un flux dans le panneau Sources.
+                  {t('settings.notificationsHint')}
                 </p>
               </div>
 
@@ -794,7 +817,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
               <div className="settings-section">
                 <h3 className="settings-section-title">RSSHub</h3>
                 <p className="settings-section-desc">
-                  Instance RSSHub utilisée pour convertir les sites web en flux RSS.
+                  {t('settings.rsshubDesc')}
                 </p>
                 <div className="settings-row">
                   <label className="settings-label" htmlFor="rsshub-instance">Instance URL</label>
@@ -815,9 +838,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
               {/* ── Fournisseur RSS ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Fournisseur RSS</h3>
+                <h3 className="settings-section-title">{t('settings.rssProvider')}</h3>
                 <p className="settings-section-desc">
-                  Connectez un fournisseur RSS externe pour synchroniser vos abonnements et statuts.
+                  {t('settings.rssProviderDesc')}
                 </p>
 
                 {providerConfig ? (
@@ -829,35 +852,35 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                           {providerConfig.type.charAt(0).toUpperCase() + providerConfig.type.slice(1)}
                         </span>
                         <span className="settings-account-status">
-                          Connecté — {providerConfig.baseUrl || 'api.feedbin.com'}
+                          {t('settings.connected')} — {providerConfig.baseUrl || 'api.feedbin.com'}
                         </span>
                       </div>
                       <button className="btn-secondary" onClick={handleProviderDisconnect}>
-                        Déconnecter
+                        {t('settings.disconnect')}
                       </button>
                     </div>
 
                     <div className="provider-sync-toggle">
-                      <label className="settings-label">Sync automatique des statuts</label>
+                      <label className="settings-label">{t('settings.autoSyncStatuses')}</label>
                       <div className="settings-format-toggle">
                         <button
                           className={`format-option ${providerSyncEnabled ? 'active' : ''}`}
                           onClick={() => handleProviderSyncToggle(true)}
                         >
-                          <span className="format-option-label">Activé</span>
+                          <span className="format-option-label">{t('settings.enabled')}</span>
                         </button>
                         <button
                           className={`format-option ${!providerSyncEnabled ? 'active' : ''}`}
                           onClick={() => handleProviderSyncToggle(false)}
                         >
-                          <span className="format-option-label">Désactivé</span>
+                          <span className="format-option-label">{t('settings.disabled')}</span>
                         </button>
                       </div>
                     </div>
 
                     {providerImportStatus && (
                       <div className="settings-ollama-status" style={{ marginTop: 8 }}>
-                        <span className={`ollama-status-dot ${providerImportStatus.startsWith('Erreur') ? 'disconnected' : 'connected'}`} />
+                        <span className={`ollama-status-dot ${providerImportStatus.startsWith(t('common.error')) ? 'disconnected' : 'connected'}`} />
                         <span className="ollama-status-text">{providerImportStatus}</span>
                       </div>
                     )}
@@ -865,7 +888,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                 ) : (
                   /* Setup state */
                   <>
-                    <label className="settings-label">Fournisseur</label>
+                    <label className="settings-label">{t('settings.provider')}</label>
                     <div className="settings-format-toggle">
                       {(['miniflux', 'freshrss', 'feedbin', 'bazqux'] as ProviderType[]).map(type => (
                         <button
@@ -890,7 +913,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                         {/* URL field for Miniflux and FreshRSS */}
                         {(providerType === 'miniflux' || providerType === 'freshrss') && (
                           <>
-                            <label className="settings-label">URL du serveur</label>
+                            <label className="settings-label">{t('settings.serverUrl')}</label>
                             <input
                               type="url"
                               className="provider-input"
@@ -904,11 +927,11 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                         {/* API Key for Miniflux */}
                         {providerType === 'miniflux' && (
                           <>
-                            <label className="settings-label">Clé API</label>
+                            <label className="settings-label">{t('settings.apiKey')}</label>
                             <input
                               type="password"
                               className="provider-input"
-                              placeholder="Votre clé API Miniflux"
+                              placeholder={t('settings.apiKeyPlaceholder')}
                               value={providerApiKey}
                               onChange={e => setProviderApiKey(e.target.value)}
                             />
@@ -919,20 +942,20 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                         {(providerType === 'freshrss' || providerType === 'feedbin' || providerType === 'bazqux') && (
                           <>
                             <label className="settings-label">
-                              {providerType === 'feedbin' ? 'Email' : 'Identifiant'}
+                              {providerType === 'feedbin' ? 'Email' : t('settings.username')}
                             </label>
                             <input
                               type="text"
                               className="provider-input"
-                              placeholder={providerType === 'feedbin' ? 'email@example.com' : 'Nom d\'utilisateur'}
+                              placeholder={providerType === 'feedbin' ? 'email@example.com' : t('settings.usernamePlaceholder')}
                               value={providerUsername}
                               onChange={e => setProviderUsername(e.target.value)}
                             />
-                            <label className="settings-label">Mot de passe</label>
+                            <label className="settings-label">{t('settings.password')}</label>
                             <input
                               type="password"
                               className="provider-input"
-                              placeholder="Mot de passe"
+                              placeholder={t('settings.password')}
                               value={providerPassword}
                               onChange={e => setProviderPassword(e.target.value)}
                             />
@@ -945,32 +968,32 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                             onClick={handleProviderTest}
                             disabled={providerTestStatus === 'testing'}
                           >
-                            {providerTestStatus === 'testing' ? 'Test…' : 'Tester la connexion'}
+                            {providerTestStatus === 'testing' ? t('settings.testing') : t('settings.testConnection')}
                           </button>
                           <button
                             className="btn-primary"
                             onClick={handleProviderConnect}
                             disabled={providerImporting}
                           >
-                            {providerImporting ? 'Import…' : 'Importer les abonnements'}
+                            {providerImporting ? t('settings.importing') : t('settings.importSubscriptions')}
                           </button>
                         </div>
 
                         {providerTestStatus === 'success' && (
                           <div className="settings-ollama-status">
                             <span className="ollama-status-dot connected" />
-                            <span className="ollama-status-text">Connexion réussie</span>
+                            <span className="ollama-status-text">{t('settings.connectionSuccess')}</span>
                           </div>
                         )}
                         {providerTestStatus === 'error' && (
                           <div className="settings-ollama-status">
                             <span className="ollama-status-dot disconnected" />
-                            <span className="ollama-status-text">Échec de la connexion</span>
+                            <span className="ollama-status-text">{t('settings.connectionFailed')}</span>
                           </div>
                         )}
                         {providerImportStatus && (
                           <div className="settings-ollama-status">
-                            <span className={`ollama-status-dot ${providerImportStatus.startsWith('Erreur') ? 'disconnected' : 'connected'}`} />
+                            <span className={`ollama-status-dot ${providerImportStatus.startsWith(t('common.error')) ? 'disconnected' : 'connected'}`} />
                             <span className="ollama-status-text">{providerImportStatus}</span>
                           </div>
                         )}
@@ -981,12 +1004,12 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
               </div>
 
               <div className="settings-section">
-                <h3 className="settings-section-title">IA / Résumés</h3>
+                <h3 className="settings-section-title">{t('settings.aiSummaries')}</h3>
                 <p className="settings-section-desc">
-                  Choisissez le fournisseur et le format des résumés.
+                  {t('settings.aiSummariesDesc')}
                 </p>
 
-                <label className="settings-label">Fournisseur</label>
+                <label className="settings-label">{t('settings.provider')}</label>
                 <div className="settings-format-toggle">
                   <button
                     className={`format-option ${llmConfig.provider === 'ollama' ? 'active' : ''}`}
@@ -1018,7 +1041,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       <>
                         <div className="settings-ollama-status">
                           <span className="ollama-status-dot connected" />
-                          <span className="ollama-status-text">Ollama connecté</span>
+                          <span className="ollama-status-text">{t('settings.ollamaConnected')}</span>
                           {ollamaStatus.models.length > 0 && (
                             <select
                               className="ollama-model-select"
@@ -1037,13 +1060,13 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                         </div>
                         {ollamaStatus.models.length === 0 && (
                           <div className="ollama-setup-card">
-                            <p className="ollama-setup-text">Aucun modèle installé.</p>
+                            <p className="ollama-setup-text">{t('settings.noModelsInstalled')}</p>
                             <button
                               className="ollama-setup-btn"
                               onClick={() => handlePullModel('llama3.2:3b')}
                               disabled={pullState === 'pulling'}
                             >
-                              Installer llama3.2:3b (2 GB)
+                              {t('settings.installModel', { model: 'llama3.2:3b', size: '2 GB' })}
                             </button>
                           </div>
                         )}
@@ -1054,7 +1077,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                               onClick={() => handlePullModel('llama3.2:3b')}
                               disabled={pullState === 'pulling'}
                             >
-                              + Installer llama3.2:3b (recommandé)
+                              + {t('settings.installModelRecommended', { model: 'llama3.2:3b' })}
                             </button>
                           </div>
                         )}
@@ -1063,27 +1086,27 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       <div className="ollama-setup-card">
                         <div className="settings-ollama-status">
                           <span className="ollama-status-dot disconnected" />
-                          <span className="ollama-status-text">Ollama non détecté</span>
+                          <span className="ollama-status-text">{t('settings.ollamaNotDetected')}</span>
                         </div>
                         <p className="ollama-setup-text">
-                          Ollama permet d'exécuter des modèles IA localement, sans connexion internet et gratuitement.
+                          {t('settings.ollamaDesc')}
                         </p>
                         <div className="ollama-setup-actions">
                           <button
                             className="ollama-setup-btn"
                             onClick={() => openExternal('https://ollama.com/download')}
                           >
-                            Télécharger Ollama
+                            {t('settings.downloadOllama')}
                           </button>
                           <button
                             className="ollama-setup-btn secondary"
                             onClick={refreshOllamaStatus}
                           >
-                            Vérifier la connexion
+                            {t('settings.checkConnection')}
                           </button>
                         </div>
                         <p className="ollama-setup-hint">
-                          Après installation, lancez <code>ollama serve</code> puis cliquez sur "Vérifier la connexion".
+                          {t('settings.ollamaHint')}
                         </p>
                       </div>
                     )}
@@ -1108,7 +1131,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     {pullState === 'done' && (
                       <div className="settings-ollama-status">
                         <span className="ollama-status-dot connected" />
-                        <span className="ollama-status-text">Modèle installé avec succès</span>
+                        <span className="ollama-status-text">{t('settings.modelInstalledSuccess')}</span>
                       </div>
                     )}
                     {pullState === 'error' && (
@@ -1126,7 +1149,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       <>
                         <span className="ollama-status-dot disconnected" />
                         <span className="ollama-status-text">
-                          Aucune clé API cloud — ajoutez au moins une clé dans .env (<code>VITE_GROQ_API_KEY</code>, <code>VITE_MISTRAL_API_KEY</code>, ou <code>VITE_GEMINI_API_KEY</code>)
+                          {t('settings.noCloudApiKey')}
                         </span>
                       </>
                     ) : (
@@ -1141,7 +1164,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   </div>
                 )}
 
-                <label className="settings-label" style={{ marginTop: '12px' }}>Format du résumé</label>
+                <label className="settings-label" style={{ marginTop: '12px' }}>{t('settings.summaryFormat')}</label>
                 <div className="settings-format-toggle">
                   <button
                     className={`format-option ${summaryFormat === 'bullets' ? 'active' : ''}`}
@@ -1151,7 +1174,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     }}
                   >
                     <span className="format-option-icon">•</span>
-                    <span className="format-option-label">Points clés</span>
+                    <span className="format-option-label">{t('settings.keyPoints')}</span>
                   </button>
                   <button
                     className={`format-option ${summaryFormat === 'paragraph' ? 'active' : ''}`}
@@ -1161,7 +1184,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                     }}
                   >
                     <span className="format-option-icon">¶</span>
-                    <span className="format-option-label">Paragraphe</span>
+                    <span className="format-option-label">{t('settings.paragraph')}</span>
                   </button>
                 </div>
 
@@ -1169,26 +1192,26 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
               {/* ── Lecture vocale ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Lecture vocale</h3>
+                <h3 className="settings-section-title">{t('settings.textToSpeech')}</h3>
                 <p className="settings-section-desc">
-                  Choisissez le moteur de synthèse vocale pour la lecture des articles.
+                  {t('settings.ttsDesc')}
                 </p>
 
-                <label className="settings-label">Moteur</label>
+                <label className="settings-label">{t('settings.engine')}</label>
                 <div className="settings-format-toggle">
                   <button
                     className={`format-option ${ttsConfig.engine === 'browser' ? 'active' : ''}`}
                     onClick={() => handleTtsEngineChange('browser')}
                   >
                     <span className="format-option-icon">◎</span>
-                    <span className="format-option-label">Navigateur</span>
+                    <span className="format-option-label">{t('settings.browser')}</span>
                   </button>
                   <button
                     className={`format-option ${ttsConfig.engine === 'native' ? 'active' : ''}`}
                     onClick={() => handleTtsEngineChange('native')}
                   >
                     <span className="format-option-icon">⌂</span>
-                    <span className="format-option-label">Natif</span>
+                    <span className="format-option-label">{t('settings.native')}</span>
                   </button>
                   <button
                     className={`format-option ${ttsConfig.engine === 'elevenlabs' ? 'active' : ''}`}
@@ -1202,7 +1225,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                 {(ttsConfig.engine === 'browser' || ttsConfig.engine === 'native') && (
                   <>
                     <label className="settings-label" style={{ marginTop: 12 }}>
-                      Vitesse de lecture
+                      {t('settings.readingSpeed')}
                     </label>
                     <div className="settings-opacity-slider">
                       <input
@@ -1228,7 +1251,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                       value={ttsConfig.elevenLabsVoiceId}
                       onChange={(e) => handleTtsFieldChange('elevenLabsVoiceId', e.target.value)}
                     />
-                    <label className="settings-label">Modèle</label>
+                    <label className="settings-label">{t('settings.model')}</label>
                     <input
                       type="text"
                       className="provider-input"
@@ -1242,11 +1265,11 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                 <div className="provider-actions" style={{ marginTop: 12 }}>
                   {ttsTestStatus === 'idle' ? (
                     <button className="btn-secondary" onClick={handleTtsTest}>
-                      Tester
+                      {t('settings.test')}
                     </button>
                   ) : (
                     <button className="btn-secondary" onClick={handleTtsTestStop}>
-                      Arrêter le test
+                      {t('settings.stopTest')}
                     </button>
                   )}
                 </div>
@@ -1260,12 +1283,12 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
               {/* ── Traduction ── */}
               <div className="settings-section">
-                <h3 className="settings-section-title">Traduction</h3>
+                <h3 className="settings-section-title">{t('settings.translation')}</h3>
                 <p className="settings-section-desc">
-                  Traduisez les articles via Google Translate (gratuit, sans clé API).
+                  {t('settings.translationDesc')}
                 </p>
 
-                <label className="settings-label">Langue cible</label>
+                <label className="settings-label">{t('settings.targetLanguage')}</label>
                 <select
                   className="provider-input"
                   value={translationLang}
@@ -1281,9 +1304,9 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
               </div>
 
               <div className="settings-section">
-                <h3 className="settings-section-title">Importer des flux</h3>
+                <h3 className="settings-section-title">{t('settings.importFeeds')}</h3>
                 <p className="settings-section-desc">
-                  Importez vos abonnements depuis un fichier OPML exporté par un autre lecteur RSS.
+                  {t('settings.importFeedsDesc')}
                 </p>
 
                 <div
@@ -1302,10 +1325,10 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   />
                   <span className="opml-dropzone-icon">📂</span>
                   <span className="opml-dropzone-text">
-                    Glissez un fichier OPML ici
+                    {t('settings.dropOpmlHere')}
                   </span>
                   <span className="opml-dropzone-hint">
-                    ou cliquez pour parcourir
+                    {t('settings.orClickToBrowse')}
                   </span>
                 </div>
 
@@ -1327,10 +1350,10 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
                   >
                     <span className="opml-result-icon">✓</span>
                     <div className="opml-result-text">
-                      <strong>{importResult.added}</strong> flux importé{importResult.added > 1 ? 's' : ''}
+                      <strong>{importResult.added}</strong> {t('settings.feedsImported', { count: importResult.added })}
                       {importResult.skipped > 0 && (
                         <span className="opml-result-skipped">
-                          {' '}({importResult.skipped} déjà existant{importResult.skipped > 1 ? 's' : ''})
+                          {' '}({t('settings.alreadyExisting', { count: importResult.skipped })})
                         </span>
                       )}
                     </div>
@@ -1341,7 +1364,7 @@ export function SettingsModal({ isOpen, onClose, onImportOpml, feedCount = 0, on
 
             <div className="modal-actions">
               <button type="button" className="btn-secondary" onClick={handleClose}>
-                Fermer
+                {t('common.close')}
               </button>
             </div>
           </motion.div>
