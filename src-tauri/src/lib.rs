@@ -16,7 +16,6 @@ use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 use tauri::Manager;
 use tauri::tray::TrayIconBuilder;
 #[cfg(not(target_os = "android"))]
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use url::Url;
 
 const RSS_USER_AGENT: &str = "SuperFlux/1.0 (RSS Reader; +https://github.com/user/superflux)";
@@ -832,18 +831,6 @@ pub fn run() {
                     })
                     .build(_app)?;
 
-                // Global shortcut Ctrl+L: toggle window visibility (hide to tray / restore)
-                let gs_window = window.clone();
-                _app.global_shortcut().on_shortcut("ctrl+l", move |_app, _shortcut, event| {
-                    if let ShortcutState::Pressed = event.state {
-                        if gs_window.is_visible().unwrap_or(true) {
-                            let _ = gs_window.hide();
-                        } else {
-                            let _ = gs_window.show();
-                            let _ = gs_window.set_focus();
-                        }
-                    }
-                })?;
 
                 window.set_minimizable(true).ok();
                 window.set_maximizable(true).ok();
