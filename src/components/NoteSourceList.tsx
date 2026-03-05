@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Note } from './NotePanel';
 
@@ -36,6 +37,7 @@ export function NoteSourceList({
   onMoveNoteToFolder,
   onDeleteNote,
 }: NoteSourceListProps) {
+  const { t } = useTranslation();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(folders));
   const [newFolderInput, setNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -116,7 +118,7 @@ export function NoteSourceList({
       onContextMenu={(e) => handleNoteContext(e, note.id, note.folder)}
     >
       <span className="nsrc-note-icon">✎</span>
-      <span className="nsrc-note-title">{note.title || 'Sans titre'}</span>
+      <span className="nsrc-note-title">{note.title || t('common.untitled')}</span>
     </div>
   );
 
@@ -128,7 +130,7 @@ export function NoteSourceList({
         onClick={() => onSelectFolder(null)}
       >
         <span className="source-all-icon">✎</span>
-        <span className="source-all-label">Toutes les notes</span>
+        <span className="source-all-label">{t('notes.allNotes')}</span>
         <span className="source-all-count">{notes.length}</span>
       </button>
 
@@ -139,10 +141,10 @@ export function NoteSourceList({
           setNewFolderInput(true);
           setTimeout(() => newFolderRef.current?.focus(), 50);
         }}
-        title="Nouveau dossier"
+        title={t('common.newFolder')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau dossier</span>
+        <span className="nsrc-add-folder-label">{t('common.newFolder')}</span>
       </button>
 
       {/* New folder input */}
@@ -165,7 +167,7 @@ export function NoteSourceList({
                 if (e.key === 'Escape') { setNewFolderInput(false); setNewFolderName(''); }
               }}
               onBlur={handleCreateFolder}
-              placeholder="Nom du dossier"
+              placeholder={t('common.folderName')}
             />
           </motion.div>
         )}
@@ -232,7 +234,7 @@ export function NoteSourceList({
                 >
                   {folderNotes.map(renderNoteItem)}
                   {folderNotes.length === 0 && (
-                    <div className="nsrc-folder-empty">Dossier vide</div>
+                    <div className="nsrc-folder-empty">{t('notes.emptyFolder')}</div>
                   )}
                 </motion.div>
               )}
@@ -257,7 +259,7 @@ export function NoteSourceList({
                 onMouseEnter={() => setMoveSubmenuOpen(true)}
               >
                 <span className="feed-context-menu-icon">→</span>
-                Déplacer vers
+                {t('notes.moveTo')}
                 <span className="feed-context-menu-arrow">›</span>
               </button>
 
@@ -272,7 +274,7 @@ export function NoteSourceList({
                         closeContextMenu();
                       }}
                     >
-                      Hors dossier
+                      {t('notes.outOfFolder')}
                     </button>
                   )}
                   {/* Move to each folder */}
@@ -303,7 +305,7 @@ export function NoteSourceList({
               }}
             >
               <span className="feed-context-menu-icon">→</span>
-              Retirer du dossier
+              {t('notes.removeFromFolder')}
             </button>
           )}
           <button
@@ -314,7 +316,7 @@ export function NoteSourceList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}
@@ -336,7 +338,7 @@ export function NoteSourceList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
           <button
             className="feed-context-menu-item feed-context-menu-item--danger"
@@ -346,7 +348,7 @@ export function NoteSourceList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface DrawDoc {
@@ -73,6 +74,7 @@ export function DrawFileList({
   onDeleteFolder,
   onMoveDocToFolder,
 }: DrawFileListProps) {
+  const { t } = useTranslation();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(folders));
   const [newFolderInput, setNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -181,7 +183,7 @@ export function DrawFileList({
       ) : (
         <>
           <span className="nsrc-note-icon">🎨</span>
-          <span className="nsrc-note-title">{doc.title || 'Sans titre'}</span>
+          <span className="nsrc-note-title">{doc.title || t('common.untitled')}</span>
         </>
       )}
     </div>
@@ -195,7 +197,7 @@ export function DrawFileList({
         onClick={() => onSelectFolder(null)}
       >
         <span className="source-all-icon">🎨</span>
-        <span className="source-all-label">Tous les schemas</span>
+        <span className="source-all-label">{t('draw.allSchemas')}</span>
         <span className="source-all-count">{docs.length}</span>
       </button>
 
@@ -203,10 +205,10 @@ export function DrawFileList({
       <button
         className="nsrc-add-folder-btn"
         onClick={onAddDoc}
-        title="Nouveau schema"
+        title={t('draw.newSchema')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau schema</span>
+        <span className="nsrc-add-folder-label">{t('draw.newSchema')}</span>
       </button>
 
       {/* New folder button */}
@@ -216,10 +218,10 @@ export function DrawFileList({
           setNewFolderInput(true);
           setTimeout(() => newFolderRef.current?.focus(), 50);
         }}
-        title="Nouveau dossier"
+        title={t('common.newFolder')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau dossier</span>
+        <span className="nsrc-add-folder-label">{t('common.newFolder')}</span>
       </button>
 
       {/* New folder input */}
@@ -242,7 +244,7 @@ export function DrawFileList({
                 if (e.key === 'Escape') { setNewFolderInput(false); setNewFolderName(''); }
               }}
               onBlur={handleCreateFolder}
-              placeholder="Nom du dossier"
+              placeholder={t('common.folderName')}
             />
           </motion.div>
         )}
@@ -309,7 +311,7 @@ export function DrawFileList({
                 >
                   {folderDocs.map(renderDocItem)}
                   {folderDocs.length === 0 && (
-                    <div className="nsrc-folder-empty">Dossier vide</div>
+                    <div className="nsrc-folder-empty">{t('draw.emptyFolder')}</div>
                   )}
                 </motion.div>
               )}
@@ -321,7 +323,7 @@ export function DrawFileList({
       {/* Empty state */}
       {docs.length === 0 && folders.length === 0 && (
         <div className="editor-filelist-empty">
-          Aucun schema
+          {t('draw.noSchemas')}
         </div>
       )}
 
@@ -344,7 +346,7 @@ export function DrawFileList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
 
           {folders.length > 0 && (
@@ -354,7 +356,7 @@ export function DrawFileList({
                 onMouseEnter={() => setMoveSubmenuOpen(true)}
               >
                 <span className="feed-context-menu-icon">→</span>
-                Deplacer vers
+                {t('draw.moveTo')}
                 <span className="feed-context-menu-arrow">›</span>
               </button>
 
@@ -368,7 +370,7 @@ export function DrawFileList({
                         closeContextMenu();
                       }}
                     >
-                      Hors dossier
+                      {t('draw.outOfFolder')}
                     </button>
                   )}
                   {folders
@@ -398,7 +400,7 @@ export function DrawFileList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}
@@ -420,7 +422,7 @@ export function DrawFileList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
           <button
             className="feed-context-menu-item feed-context-menu-item--danger"
@@ -430,7 +432,7 @@ export function DrawFileList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}

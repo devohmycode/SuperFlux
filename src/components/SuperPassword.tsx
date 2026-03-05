@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Lock, Settings, ShieldCheck, ArrowDownUp, X, Wand2 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -42,6 +43,8 @@ const DEFAULT_SETTINGS: VaultSettings = {
 };
 
 export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
+  const { t } = useTranslation();
+
   // ── State machine ──
   const [vaultState, setVaultState] = useState<VaultState>('locked');
   const [loading, setLoading] = useState(true);
@@ -142,7 +145,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
       setEntries(entryList);
       setFolders(folderList);
     } catch (err) {
-      setError(typeof err === 'string' ? err : 'Erreur de chargement.');
+      setError(typeof err === 'string' ? err : t('password.loadError'));
     }
   }, []);
 
@@ -209,7 +212,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
       setSelectedEntryId(newEntry.id);
       syncVaultToCloud();
     } catch (err) {
-      setError(typeof err === 'string' ? err : "Erreur lors de la création.");
+      setError(typeof err === 'string' ? err : t('password.createError'));
     }
   }, [refreshData, selectedFolderId, syncVaultToCloud]);
 
@@ -222,7 +225,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         await refreshData();
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors de la mise à jour.');
+        setError(typeof err === 'string' ? err : t('password.updateError'));
       }
     },
     [refreshData, entries, syncVaultToCloud],
@@ -236,7 +239,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         await refreshData();
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors de la suppression.');
+        setError(typeof err === 'string' ? err : t('password.deleteError'));
       }
     },
     [refreshData, selectedEntryId, syncVaultToCloud],
@@ -278,7 +281,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         await refreshData();
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors de la création du dossier.');
+        setError(typeof err === 'string' ? err : t('password.folderCreateError'));
       }
     },
     [refreshData, syncVaultToCloud],
@@ -292,7 +295,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         await refreshData();
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors du renommage.');
+        setError(typeof err === 'string' ? err : t('password.folderRenameError'));
       }
     },
     [refreshData, folders, syncVaultToCloud],
@@ -306,7 +309,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         await refreshData();
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors de la suppression du dossier.');
+        setError(typeof err === 'string' ? err : t('password.folderDeleteError'));
       }
     },
     [refreshData, selectedFolderId, syncVaultToCloud],
@@ -320,7 +323,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
         setSettings(newSettings);
         syncVaultToCloud();
       } catch (err) {
-        setError(typeof err === 'string' ? err : 'Erreur lors de la sauvegarde des paramètres.');
+        setError(typeof err === 'string' ? err : t('password.settingsSaveError'));
       }
     },
     [syncVaultToCloud],
@@ -378,7 +381,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border-default)]">
         <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
           <Lock size={13} className="text-[var(--accent)]" />
-          <span>{entries.length} entrée{entries.length !== 1 ? 's' : ''}</span>
+          <span>{t('password.entries', { count: entries.length })}</span>
         </div>
         <div className="flex-1" />
         <Button
@@ -386,27 +389,27 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
           size="sm"
           className="gap-1.5 text-xs"
           onClick={() => setSidePanel(sidePanel === 'generator' ? null : 'generator')}
-          title="Générateur"
+          title={t('password.generator')}
         >
           <Wand2 size={13} />
-          Générer
+          {t('common.generate')}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           className="gap-1.5 text-xs"
           onClick={() => setSidePanel(sidePanel === 'audit' ? null : 'audit')}
-          title="Audit de sécurité"
+          title={t('password.securityAudit')}
         >
           <ShieldCheck size={13} />
-          Audit
+          {t('password.audit')}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           className="gap-1.5 text-xs"
           onClick={() => setSidePanel(sidePanel === 'import-export' ? null : 'import-export')}
-          title="Import / Export"
+          title={t('password.importExport')}
         >
           <ArrowDownUp size={13} />
         </Button>
@@ -415,7 +418,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
           size="sm"
           className="gap-1.5 text-xs"
           onClick={() => setSidePanel(sidePanel === 'settings' ? null : 'settings')}
-          title="Paramètres"
+          title={t('common.settings')}
         >
           <Settings size={13} />
         </Button>
@@ -424,10 +427,10 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
           size="sm"
           className="gap-1.5 text-xs text-amber-500 hover:text-amber-400"
           onClick={handleLock}
-          title="Verrouiller"
+          title={t('password.lock')}
         >
           <Lock size={13} />
-          Verrouiller
+          {t('password.lock')}
         </Button>
       </div>
 
@@ -468,7 +471,7 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
             {sidePanel === 'generator' && (
               <div className="flex flex-col h-full">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)]">
-                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">Générateur</h2>
+                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('password.generator')}</h2>
                   <Button variant="ghost" size="icon" onClick={() => setSidePanel(null)}>
                     <X size={16} />
                   </Button>
@@ -522,8 +525,8 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--text-tertiary)]">
               <Lock size={40} strokeWidth={1.5} />
-              <p className="text-sm">Sélectionnez une entrée</p>
-              <p className="text-xs">ou appuyez sur <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] text-[10px] font-mono">Ctrl+N</kbd> pour en créer une</p>
+              <p className="text-sm">{t('password.selectEntry')}</p>
+              <p className="text-xs">{t('password.pressCtrlN')}</p>
             </div>
           )}
         </div>
@@ -533,13 +536,13 @@ export function SuperPassword({ searchQuery, userId }: SuperPasswordProps) {
       <div className="flex items-center px-3 py-1.5 border-t border-[var(--border-default)] text-[10px] text-[var(--text-tertiary)]">
         <div className="flex items-center gap-3">
           <span>🔐 SuperPassword</span>
-          <span>{entries.length} entrée{entries.length !== 1 ? 's' : ''}</span>
-          <span>{folders.length} dossier{folders.length !== 1 ? 's' : ''}</span>
+          <span>{t('password.entries', { count: entries.length })}</span>
+          <span>{t('password.folders', { count: folders.length })}</span>
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-3">
           <span>
-            <kbd className="px-1 py-0.5 rounded bg-[var(--bg-elevated)] font-mono">Ctrl+N</kbd> Nouvelle entrée
+            <kbd className="px-1 py-0.5 rounded bg-[var(--bg-elevated)] font-mono">Ctrl+N</kbd> {t('password.newEntry')}
           </span>
         </div>
       </div>

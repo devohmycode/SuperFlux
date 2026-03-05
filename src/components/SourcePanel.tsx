@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { motion, AnimatePresence } from "motion/react";
 import type { Feed, FeedCategory, FeedItem, FeedSource } from "../types";
@@ -27,6 +28,7 @@ import GlassIconButton from "./GlassIconButton";
 import { isPwSyncEnabled, setPwSyncEnabled, getLastPwSync } from "../services/passwordSyncService";
 
 function PasswordSyncPanel() {
+  const { t } = useTranslation();
   const [enabled, setEnabled] = useState(isPwSyncEnabled());
   const [lastSync, setLastSync] = useState(getLastPwSync());
 
@@ -50,7 +52,7 @@ function PasswordSyncPanel() {
   return (
     <div className="pw-sync-section">
       <div className="pw-sync-toggle">
-        <label onClick={toggle}>Synchroniser le coffre</label>
+        <label onClick={toggle}>{t('sync.syncVault')}</label>
         <div
           className={`pw-sync-slider ${enabled ? 'active' : ''}`}
           onClick={toggle}
@@ -60,7 +62,7 @@ function PasswordSyncPanel() {
       </div>
       {lastSync && (
         <div className="pw-sync-status">
-          Dernière sync : {new Date(lastSync).toLocaleString()}
+          {t('sync.lastSync')} : {new Date(lastSync).toLocaleString()}
         </div>
       )}
     </div>
@@ -398,6 +400,7 @@ export function SourcePanel({
   onDeleteClip: _onDeleteClip,
   onTogglePinClip: _onTogglePinClip,
 }: SourcePanelProps) {
+  const { t } = useTranslation();
   const { isPro, showUpgradeModal } = usePro();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [bookmarkUrlOpen, setBookmarkUrlOpen] = useState(false);
@@ -664,7 +667,7 @@ export function SourcePanel({
           <span className="feed-unread">{feed.unreadCount}</span>
         )}
         {feed.notifyOnNew && (
-          <span className="feed-notify-badge" title="Notifications activées">🔔</span>
+          <span className="feed-notify-badge" title={t('source.notificationsEnabled')}>🔔</span>
         )}
         {isRSSHubUrl(feed.url) && (
           <span className="feed-rsshub-badge" title="Via RSSHub">
@@ -686,7 +689,7 @@ export function SourcePanel({
           ref={newFolderRef}
           className="folder-inline-input"
           type="text"
-          placeholder="Nom du dossier..."
+          placeholder={t('common.folderName')}
           value={newFolderInput.value}
           onChange={(e) => setNewFolderInput({ ...newFolderInput, value: e.target.value })}
           onKeyDown={(e) => {
@@ -811,7 +814,7 @@ export function SourcePanel({
           </button>
           <AnimatedThemeToggler className="theme-toggle-btn" />
           {onClose && (
-            <button className="panel-close-btn" onClick={onClose} title="Replier le panneau Sources (1)">
+            <button className="panel-close-btn" onClick={onClose} title={t('source.collapseSourcePanel')}>
               ✕
             </button>
           )}
@@ -909,7 +912,7 @@ export function SourcePanel({
           onClick={onSelectAll}
         >
           <span className="source-all-icon">⊞</span>
-          <span className="source-all-label">Tous les flux</span>
+          <span className="source-all-label">{t('feedPanel.allFeeds')}</span>
           <span className="source-all-count">{totalUnread}</span>
         </button>
 
@@ -918,7 +921,7 @@ export function SourcePanel({
           onClick={onSelectFavorites}
         >
           <span className="source-all-icon">{showFavorites ? "★" : "☆"}</span>
-          <span className="source-all-label">Favoris</span>
+          <span className="source-all-label">{t('feedPanel.favorites')}</span>
           {favoritesCount > 0 && (
             <span className="source-all-count">{favoritesCount}</span>
           )}
@@ -929,7 +932,7 @@ export function SourcePanel({
           onClick={onSelectReadLater}
         >
           <span className="source-all-icon">{showReadLater ? "🔖" : "🏷"}</span>
-          <span className="source-all-label">Lire plus tard</span>
+          <span className="source-all-label">{t('feedPanel.readLater')}</span>
           {readLaterCount > 0 && (
             <span className="source-all-count">{readLaterCount}</span>
           )}
@@ -1023,16 +1026,16 @@ export function SourcePanel({
       {onBrandSwitch && (
         <div className="mode-tab-bar">
           {([
-            { mode: 'flux' as const, icon: '◈', label: 'Flux', shortcut: '1', pro: false, color: 'blue' },
-            { mode: 'bookmark' as const, icon: '🔖', label: 'Signets', shortcut: '2', pro: false, color: 'orange' },
-            { mode: 'note' as const, icon: '📝', label: 'Notes', shortcut: '3', pro: false, color: 'green' },
-            { mode: 'editor' as const, icon: '✏️', label: 'Éditeur', shortcut: '4', pro: true, color: 'purple' },
-            { mode: 'draw' as const, icon: '🎨', label: 'Dessin', shortcut: '5', pro: true, color: 'red' },
-            { mode: 'translate' as const, icon: '🌐', label: 'Traduire', shortcut: '6', pro: false, color: 'indigo' },
-            { mode: 'expander' as const, icon: '⚡', label: 'Expander', shortcut: '7', pro: false, color: 'orange' },
-            { mode: 'clipboard' as const, icon: '📋', label: 'Clipboard', shortcut: '8', pro: false, color: 'teal' },
-            { mode: 'password' as const, icon: '🔐', label: 'Password', shortcut: '9', pro: true, color: 'rose' },
-            { mode: 'markdown' as const, icon: '📓', label: 'Markdown', shortcut: '0', pro: true, color: 'sky' },
+            { mode: 'flux' as const, icon: '◈', labelKey: 'source.tabFlux', shortcut: '1', pro: false, color: 'blue' },
+            { mode: 'bookmark' as const, icon: '🔖', labelKey: 'source.tabBookmarks', shortcut: '2', pro: false, color: 'orange' },
+            { mode: 'note' as const, icon: '📝', labelKey: 'source.tabNotes', shortcut: '3', pro: false, color: 'green' },
+            { mode: 'editor' as const, icon: '✏️', labelKey: 'source.tabEditor', shortcut: '4', pro: true, color: 'purple' },
+            { mode: 'draw' as const, icon: '🎨', labelKey: 'source.tabDraw', shortcut: '5', pro: true, color: 'red' },
+            { mode: 'translate' as const, icon: '🌐', labelKey: 'source.tabTranslate', shortcut: '6', pro: false, color: 'indigo' },
+            { mode: 'expander' as const, icon: '⚡', labelKey: 'source.tabExpander', shortcut: '7', pro: false, color: 'orange' },
+            { mode: 'clipboard' as const, icon: '📋', labelKey: 'source.tabClipboard', shortcut: '8', pro: false, color: 'teal' },
+            { mode: 'password' as const, icon: '🔐', labelKey: 'source.tabPassword', shortcut: '9', pro: true, color: 'rose' },
+            { mode: 'markdown' as const, icon: '📓', labelKey: 'source.tabMarkdown', shortcut: '0', pro: true, color: 'sky' },
           ]).map(tab => {
             const locked = tab.pro && !isPro;
             return (
@@ -1042,7 +1045,7 @@ export function SourcePanel({
                 icon={locked ? '🔒' : tab.icon}
                 active={brandMode === tab.mode}
                 onClick={() => onBrandSwitch(tab.mode)}
-                title={locked ? `${tab.label} (Pro)` : `${tab.label} (Ctrl+${tab.shortcut})`}
+                title={locked ? `${t(tab.labelKey)} (Pro)` : `${t(tab.labelKey)} (Ctrl+${tab.shortcut})`}
                 className={locked ? 'mode-tab--locked' : ''}
               />
             );
@@ -1113,12 +1116,12 @@ export function SourcePanel({
         <button
           className="footer-btn footer-btn-add"
           title={
-            brandMode === 'flux' ? 'Ajouter un flux' :
-            brandMode === 'note' ? 'Nouvelle note' :
-            brandMode === 'editor' ? 'Nouveau document' :
-            brandMode === 'expander' ? 'Nouveau snippet' :
-            brandMode === 'clipboard' ? 'Clipboard' :
-            'Ajouter un bookmark'
+            brandMode === 'flux' ? t('source.addFeed') :
+            brandMode === 'note' ? t('source.newNote') :
+            brandMode === 'editor' ? t('source.newDocument') :
+            brandMode === 'expander' ? t('source.newSnippet') :
+            brandMode === 'clipboard' ? t('source.tabClipboard') :
+            t('source.addBookmark')
           }
           onClick={() => {
             if (brandMode === 'flux') {
@@ -1146,18 +1149,18 @@ export function SourcePanel({
             </span>
           )}
         </button>
-        <button className="footer-btn" title="Statistiques" onClick={() => setIsStatsOpen(true)}>
+        <button className="footer-btn" title={t('source.statistics')} onClick={() => setIsStatsOpen(true)}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
             <line x1="3" y1="12" x2="3" y2="7" />
             <line x1="8" y1="12" x2="8" y2="4" />
             <line x1="13" y1="12" x2="13" y2="9" />
           </svg>
         </button>
-        <button className="footer-btn" title="Paramètres" onClick={() => setIsSettingsOpen(true)}>
+        <button className="footer-btn" title={t('common.settings')} onClick={() => setIsSettingsOpen(true)}>
           <span>⚙</span>
         </button>
         {!isPro && (
-          <button className="footer-btn upgrade-btn" title="Passer à Pro" onClick={showUpgradeModal}>
+          <button className="footer-btn upgrade-btn" title={t('settings.upgradeToPro')} onClick={showUpgradeModal}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="8,1 10.5,5.5 15,6.5 12,10 12.5,15 8,12.5 3.5,15 4,10 1,6.5 5.5,5.5" />
             </svg>
@@ -1167,7 +1170,7 @@ export function SourcePanel({
           <button
             className="palette-btn"
             onClick={() => setPaletteOpen(prev => !prev)}
-            title="Palette de couleurs"
+            title={t('settings.colorPalette')}
           >
             {(() => {
               const p = getPaletteById(getStoredPaletteId());
@@ -1222,38 +1225,38 @@ export function SourcePanel({
             <div className="panel-about-appname">SuperFlux</div>
             <div className="panel-about-version">v0.4.0</div>
             <p className="panel-about-desc">
-              Lecteur RSS moderne et performant. Agrégez vos flux favoris, podcasts, Reddit, YouTube et réseaux sociaux en un seul endroit.
+              {t('source.aboutDesc')}
             </p>
           </div>
 
           <div className="panel-section">
-            <div className="panel-section-title">Raccourcis clavier</div>
+            <div className="panel-section-title">{t('source.keyboardShortcuts')}</div>
             <div className="panel-shortcuts">
               <div className="panel-shortcut-row">
-                <span className="panel-shortcut-label">Panneau Sources</span>
+                <span className="panel-shortcut-label">{t('source.sourcesPanel')}</span>
                 <span className="panel-shortcut-key">1</span>
               </div>
               <div className="panel-shortcut-row">
-                <span className="panel-shortcut-label">Panneau Articles</span>
+                <span className="panel-shortcut-label">{t('source.articlesPanel')}</span>
                 <span className="panel-shortcut-key">2</span>
               </div>
               <div className="panel-shortcut-row">
-                <span className="panel-shortcut-label">Panneau Lecture</span>
+                <span className="panel-shortcut-label">{t('source.readerPanel')}</span>
                 <span className="panel-shortcut-key">3</span>
               </div>
               <div className="panel-shortcut-row">
-                <span className="panel-shortcut-label">Fermer ce panneau</span>
+                <span className="panel-shortcut-label">{t('source.closeThisPanel')}</span>
                 <span className="panel-shortcut-key">Esc</span>
               </div>
             </div>
           </div>
 
           <div className="panel-section">
-            <div className="panel-section-title">Fonctionnalités</div>
+            <div className="panel-section-title">{t('source.features')}</div>
             <div className="panel-features-grid">
               <div className="panel-feature">
                 <span className="panel-feature-icon">◇</span>
-                <span>Flux RSS & Atom</span>
+                <span>{t('source.featureRssAtom')}</span>
               </div>
               <div className="panel-feature">
                 <span className="panel-feature-icon">⬡</span>
@@ -1277,11 +1280,11 @@ export function SourcePanel({
               </div>
               <div className="panel-feature">
                 <span className="panel-feature-icon">✦</span>
-                <span>Résumés IA</span>
+                <span>{t('source.featureAiSummaries')}</span>
               </div>
               <div className="panel-feature">
                 <span className="panel-feature-icon">🔊</span>
-                <span>Lecture vocale</span>
+                <span>{t('source.featureTts')}</span>
               </div>
             </div>
           </div>
@@ -1310,7 +1313,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">📁</span>
-            Créer un sous-dossier{!isPro ? ' (Pro)' : ''}
+            {t('source.createSubfolder')}{!isPro ? ' (Pro)' : ''}
           </button>
         </div>
       )}
@@ -1340,7 +1343,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">📁</span>
-            Créer un sous-dossier{!isPro ? ' (Pro)' : ''}
+            {t('source.createSubfolder')}{!isPro ? ' (Pro)' : ''}
           </button>
           <button
             className="feed-context-menu-item"
@@ -1358,7 +1361,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
           <button
             className="feed-context-menu-item"
@@ -1369,7 +1372,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">{isPinned({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: '' }) ? '✦' : '☆'}</span>
-            {isPinned({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: '' }) ? 'Désépingler' : 'Épingler en haut'}
+            {isPinned({ kind: 'folder', categoryId: contextMenu.categoryId, folderPath: contextMenu.folderPath, label: '' }) ? t('source.unpin') : t('source.pinToTop')}
           </button>
           <button
             className="feed-context-menu-item feed-context-menu-item--danger"
@@ -1379,7 +1382,7 @@ export function SourcePanel({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer le dossier
+            {t('source.deleteFolder')}
           </button>
         </div>
       )}
@@ -1405,7 +1408,7 @@ export function SourcePanel({
               }}
             >
               <span className="feed-context-menu-icon">{isPinned({ kind: 'feed', feedId: contextMenu.feed.id, label: '', icon: '' }) ? '✦' : '☆'}</span>
-              {isPinned({ kind: 'feed', feedId: contextMenu.feed.id, label: '', icon: '' }) ? 'Désépingler' : 'Épingler en haut'}
+              {isPinned({ kind: 'feed', feedId: contextMenu.feed.id, label: '', icon: '' }) ? t('source.unpin') : t('source.pinToTop')}
             </button>
             <button
               className="feed-context-menu-item"
@@ -1415,7 +1418,7 @@ export function SourcePanel({
               }}
             >
               <span className="feed-context-menu-icon">✎</span>
-              Renommer
+              {t('common.rename')}
             </button>
             <button
               className="feed-context-menu-item"
@@ -1425,14 +1428,14 @@ export function SourcePanel({
               }}
             >
               <span className="feed-context-menu-icon">{contextMenu.feed.notifyOnNew ? '🔔' : '🔕'}</span>
-              {contextMenu.feed.notifyOnNew ? 'Désactiver notifications' : 'Activer notifications'}
+              {contextMenu.feed.notifyOnNew ? t('source.disableNotifications') : t('source.enableNotifications')}
             </button>
             <button
               className="feed-context-menu-item feed-context-menu-item--danger"
               onClick={() => { onRemoveFeed(contextMenu.feed.id); setContextMenu(null); }}
             >
               <span className="feed-context-menu-icon">✕</span>
-              Supprimer
+              {t('common.delete')}
             </button>
 
             {allFolderPaths.length > 0 && (
@@ -1442,7 +1445,7 @@ export function SourcePanel({
                   onMouseEnter={() => setMoveSubmenuFeedId(contextMenu.feed.id)}
                 >
                   <span className="feed-context-menu-icon">→</span>
-                  Déplacer vers
+                  {t('source.moveTo')}
                   <span className="feed-context-menu-arrow">›</span>
                 </button>
 
@@ -1456,7 +1459,7 @@ export function SourcePanel({
                           setContextMenu(null);
                         }}
                       >
-                        Racine
+                        {t('source.root')}
                       </button>
                     )}
                     {allFolderPaths

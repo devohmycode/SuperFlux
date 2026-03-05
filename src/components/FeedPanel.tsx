@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import type { FeedCategory, FeedItem, FeedSource } from '../types';
 import MorphingPageDots from './ui/morphing-page-dots';
@@ -53,22 +54,22 @@ interface FeedPanelProps {
   onTranslateActiveChange?: (active: boolean) => void;
 }
 
-function formatTimeAgo(date: Date): string {
+function formatTimeAgo(date: Date, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'à l\'instant';
+  if (diffMins < 1) return t('common.justNow');
   if (diffMins < 60) return `${diffMins}m`;
   if (diffHours < 24) return `${diffHours}h`;
   if (diffDays < 7) return `${diffDays}j`;
   return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-function formatCommentCount(count: number): string {
-  return `${count} ${count > 1 ? 'commentaires' : 'commentaire'}`;
+function formatCommentCount(count: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  return t('common.comments', { count });
 }
 
 function formatDuration(seconds: number): string {
@@ -82,15 +83,15 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function groupByTime(items: FeedItem[]): { label: string; items: FeedItem[] }[] {
+function groupByTime(items: FeedItem[], t: (key: string) => string): { label: string; items: FeedItem[] }[] {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86400000);
 
   const groups: { label: string; items: FeedItem[] }[] = [
-    { label: 'Aujourd\'hui', items: [] },
-    { label: 'Hier', items: [] },
-    { label: 'Plus ancien', items: [] },
+    { label: t('common.today'), items: [] },
+    { label: t('common.yesterday'), items: [] },
+    { label: t('common.older'), items: [] },
   ];
 
   items.forEach(item => {
@@ -103,12 +104,12 @@ function groupByTime(items: FeedItem[]): { label: string; items: FeedItem[] }[] 
 }
 
 const sourceLabels: Record<FeedSource, string> = {
-  article: 'Articles',
+  article: 'sources.articles',
   reddit: 'Reddit',
   youtube: 'YouTube',
-  twitter: 'Réseaux',
-  mastodon: 'Réseaux',
-  podcast: 'Podcasts',
+  twitter: 'sources.social',
+  mastodon: 'sources.social',
+  podcast: 'sources.podcasts',
 };
 
 function findFeedName(categories: FeedCategory[], feedId: string): string | null {
@@ -121,6 +122,7 @@ function findFeedName(categories: FeedCategory[], feedId: string): string | null
 
 export function FeedPanel({ categories, items, selectedFeedId, selectedSource, selectedItemId, showFavorites, showReadLater, onSelectItem, onMarkAllAsRead, onMarkAllAsUnread, onToggleRead, onToggleStar, onToggleBookmark, onReorderItems, onSaveAsBookmark, onClose, translateActive: translateActiveProp, onTranslateActiveChange }: FeedPanelProps) {
   const { isPro, showUpgradeModal } = usePro();
+  const { t } = useTranslation();
   const [viewMode, setViewMode] = useLocalStorage<ViewMode>('superflux_viewmode', 'normal');
   const compact = viewMode === 'compact';
   const itemsPerPage = compact ? ITEMS_PER_PAGE_COMPACT : ITEMS_PER_PAGE_NORMAL;
@@ -214,7 +216,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
     return items.slice(start, start + itemsPerPage);
   }, [items, currentPage, itemsPerPage]);
 
-  const paginatedGroups = useMemo(() => groupByTime(paginatedItems), [paginatedItems]);
+  const paginatedGroups = useMemo(() => groupByTime(paginatedItems, t), [paginatedItems, t]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, item: FeedItem) => {
     e.preventDefault();
@@ -236,7 +238,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
       setDigestText(result);
       setDigestState('done');
     } catch (e) {
-      setDigestError(e instanceof Error ? e.message : 'Erreur inconnue');
+      setDigestError(e instanceof Error ? e.message : t('common.unknownError'));
       setDigestState('error');
     }
   }, [digestState, items]);
@@ -323,14 +325,14 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
 
   const unreadCount = items.filter(i => !i.isRead).length;
   const title = showFavorites
-    ? 'Favoris'
+    ? t('feedPanel.favorites')
     : showReadLater
-      ? 'Lire plus tard'
+      ? t('feedPanel.readLater')
       : selectedFeedId
-      ? findFeedName(categories, selectedFeedId) || items[0]?.feedName || 'Flux'
+      ? findFeedName(categories, selectedFeedId) || items[0]?.feedName || t('addFeed.flux')
       : selectedSource
-        ? sourceLabels[selectedSource]
-        : 'Tous les flux';
+        ? (sourceLabels[selectedSource].includes('.') ? t(sourceLabels[selectedSource]) : sourceLabels[selectedSource])
+        : t('feedPanel.allFeeds');
 
   return (
     <div className={`feed-panel ${compact ? 'compact' : ''}`}>
@@ -346,21 +348,21 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
             </GradientText>
           </h2>
           {unreadCount > 0 && (
-            <span className="feed-panel-unread">{unreadCount} non lus</span>
+            <span className="feed-panel-unread">{t('feedPanel.unread', { count: unreadCount })}</span>
           )}
         </div>
         <div className="feed-panel-actions">
           <GlassIconButton
             color="purple"
             icon={digestState === 'loading' ? <span className="btn-spinner" /> : isPro ? '✦' : '🔒'}
-            title={isPro ? "Résumer l'actualité" : "Résumer (Pro)"}
+            title={isPro ? t('feedPanel.summarize') : t('feedPanel.summarizePro')}
             onClick={isPro ? handleDigest : showUpgradeModal}
             disabled={digestState === 'loading' || items.length === 0}
           />
           <GlassIconButton
             color="blue"
             icon={translateLoading ? <span className="btn-spinner" /> : '🌐'}
-            title={translateActive ? 'Voir les originaux' : 'Traduire la liste'}
+            title={t(translateActive ? 'common.viewOriginals' : 'common.translateList')}
             onClick={handleTranslateList}
             disabled={translateLoading || items.length === 0}
             active={translateActive}
@@ -376,27 +378,27 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                 )}
               </svg>
             }
-            title={unreadCount > 0 ? 'Tout marquer comme lu' : 'Tout marquer comme non lu'}
+            title={unreadCount > 0 ? t('feedPanel.markAllRead') : t('feedPanel.markAllUnread')}
             onClick={unreadCount > 0 ? onMarkAllAsRead : onMarkAllAsUnread}
           />
           <GlassIconButton
             color="orange"
             icon="▦"
-            title="Vue cartes"
+            title={t('common.cardsView')}
             onClick={() => setViewMode(viewMode === 'cards' ? 'normal' : 'cards')}
             active={viewMode === 'cards'}
           />
           <GlassIconButton
             color="indigo"
             icon={compact ? '☰' : '≡'}
-            title={compact ? 'Vue normale' : 'Vue compacte'}
+            title={compact ? t('common.normalView') : t('common.compactView')}
             onClick={() => setViewMode(viewMode === 'compact' ? 'normal' : 'compact')}
             active={compact}
           />
           <GlassIconButton
             color="red"
             icon="✕"
-            title="Fermer le panneau (2)"
+            title={t('feedPanel.closePanel')}
             onClick={onClose}
           />
         </div>
@@ -416,7 +418,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
               onClick={() => setDigestOpen(prev => !prev)}
             >
               <span className="feed-digest-icon">✦</span>
-              <span className="feed-digest-title">Digest IA</span>
+              <span className="feed-digest-title">{t('feedPanel.digestAI')}</span>
               <span className={`feed-digest-chevron ${digestOpen ? 'open' : ''}`}>›</span>
             </button>
             <AnimatePresence>
@@ -451,8 +453,8 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
         {items.length === 0 && (
           <div className="feed-empty">
             <span className="feed-empty-icon">◇</span>
-            <p className="feed-empty-text">Aucun article pour le moment</p>
-            <p className="feed-empty-hint">Les nouveaux articles apparaîtront ici lors de la prochaine synchronisation</p>
+            <p className="feed-empty-text">{t('feedPanel.noArticles')}</p>
+            <p className="feed-empty-hint">{t('feedPanel.articlesHint')}</p>
           </div>
         )}
 
@@ -480,7 +482,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                 <div className="feed-blob-card__glass">
                   <div className="feed-blob-card__meta">
                     <span className="feed-blob-card__source">{item.feedName}</span>
-                    <span className="feed-blob-card__time">{formatTimeAgo(item.publishedAt)}</span>
+                    <span className="feed-blob-card__time">{formatTimeAgo(item.publishedAt, t)}</span>
                   </div>
 
                   <div className="feed-blob-card__body">
@@ -540,14 +542,14 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                 transition={{ delay: idx * 0.03, duration: 0.3 }}
               >
                 <div className="feed-card-meta">
-                  <span className="feed-card-drag-handle" title="Glisser pour réordonner">⠿</span>
+                  <span className="feed-card-drag-handle" title={t('feedPanel.dragToReorder')}>⠿</span>
                   <span className="feed-card-source">{item.feedName}</span>
                   <span className="feed-card-dot">·</span>
-                  <span className="feed-card-time">{formatTimeAgo(item.publishedAt)}</span>
+                  <span className="feed-card-time">{formatTimeAgo(item.publishedAt, t)}</span>
                   {item.isStarred && <span className="feed-card-star">★</span>}
                   <button
                     className={`feed-card-bookmark ${item.isBookmarked ? 'active' : ''}`}
-                    title={item.isBookmarked ? 'Retirer de Lire plus tard' : 'Lire plus tard'}
+                    title={item.isBookmarked ? t('feedPanel.removeReadLater') : t('feedPanel.readLater')}
                     onClick={(e) => { e.stopPropagation(); onToggleBookmark(item.id); }}
                   >
                     {item.isBookmarked ? '🔖' : '🏷'}
@@ -565,7 +567,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                         <span key={tag} className="feed-card-tag">{tag}</span>
                       ))}
                       {item.source === 'reddit' && typeof item.commentCount === 'number' && (
-                        <span className="feed-card-comments">{formatCommentCount(item.commentCount)}</span>
+                        <span className="feed-card-comments">{formatCommentCount(item.commentCount, t)}</span>
                       )}
                       {item.source === 'podcast' && item.duration ? (
                         <span className="feed-card-readtime">{formatDuration(item.duration)}</span>
@@ -604,11 +606,11 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                   <div className="feed-card-meta">
                     <span className="feed-card-source">{item.feedName}</span>
                     <span className="feed-card-dot">·</span>
-                    <span className="feed-card-time">{formatTimeAgo(item.publishedAt)}</span>
+                    <span className="feed-card-time">{formatTimeAgo(item.publishedAt, t)}</span>
                     {item.isStarred && <span className="feed-card-star">★</span>}
                     <button
                       className={`feed-card-bookmark ${item.isBookmarked ? 'active' : ''}`}
-                      title={item.isBookmarked ? 'Retirer de Lire plus tard' : 'Lire plus tard'}
+                      title={item.isBookmarked ? t('feedPanel.removeReadLater') : t('feedPanel.readLater')}
                       onClick={(e) => { e.stopPropagation(); onToggleBookmark(item.id); }}
                     >
                       {item.isBookmarked ? '🔖' : '🏷'}
@@ -626,7 +628,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
                           <span key={tag} className="feed-card-tag">{tag}</span>
                         ))}
                         {item.source === 'reddit' && typeof item.commentCount === 'number' && (
-                          <span className="feed-card-comments">{formatCommentCount(item.commentCount)}</span>
+                          <span className="feed-card-comments">{formatCommentCount(item.commentCount, t)}</span>
                         )}
                         {item.source === 'podcast' && item.duration ? (
                           <span className="feed-card-readtime">🎧 {formatDuration(item.duration)}</span>
@@ -669,21 +671,21 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
             onClick={() => { onToggleRead(contextMenu.item.id); setContextMenu(null); }}
           >
             <span className="feed-context-menu-icon">{contextMenu.item.isRead ? '●' : '○'}</span>
-            {contextMenu.item.isRead ? 'Marquer comme non lu' : 'Marquer comme lu'}
+            {contextMenu.item.isRead ? t('feedPanel.markAsUnread') : t('feedPanel.markAsRead')}
           </button>
           <button
             className="feed-context-menu-item"
             onClick={() => { onToggleStar(contextMenu.item.id); setContextMenu(null); }}
           >
             <span className="feed-context-menu-icon">{contextMenu.item.isStarred ? '★' : '☆'}</span>
-            {contextMenu.item.isStarred ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+            {contextMenu.item.isStarred ? t('feedPanel.removeFromFavorites') : t('feedPanel.addToFavorites')}
           </button>
           <button
             className="feed-context-menu-item"
             onClick={() => { onToggleBookmark(contextMenu.item.id); setContextMenu(null); }}
           >
             <span className="feed-context-menu-icon">{contextMenu.item.isBookmarked ? '🔖' : '🏷'}</span>
-            {contextMenu.item.isBookmarked ? 'Retirer de Lire plus tard' : 'Lire plus tard'}
+            {contextMenu.item.isBookmarked ? t('feedPanel.removeReadLater') : t('feedPanel.readLater')}
           </button>
           {onSaveAsBookmark && (
             <button
@@ -691,7 +693,7 @@ export function FeedPanel({ categories, items, selectedFeedId, selectedSource, s
               onClick={() => { onSaveAsBookmark(contextMenu.item); setContextMenu(null); }}
             >
               <span className="feed-context-menu-icon">📌</span>
-              Ajouter aux Bookmarks
+              {t('feedPanel.addToBookmarks')}
             </button>
           )}
         </div>

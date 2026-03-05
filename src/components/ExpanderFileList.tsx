@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface Snippet {
@@ -44,6 +45,7 @@ export function ExpanderFileList({
   onDeleteSnippet,
   onCopySnippet,
 }: ExpanderFileListProps) {
+  const { t } = useTranslation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -91,7 +93,7 @@ export function ExpanderFileList({
           >
             <span className="nsrc-note-icon">⚡</span>
             <div className="nsrc-note-info">
-              <span className="nsrc-note-title">{snippet.name || 'Sans titre'}</span>
+              <span className="nsrc-note-title">{snippet.name || t('common.untitled')}</span>
               {snippet.keyword && (
                 <span className="expander-keyword-badge">{snippet.keyword}</span>
               )}
@@ -99,7 +101,7 @@ export function ExpanderFileList({
             {hoveredId === snippet.id && (
               <button
                 className="expander-copy-btn"
-                title="Copier le snippet"
+                title={t('expander.copySnippet')}
                 onClick={(e) => {
                   e.stopPropagation();
                   onCopySnippet(snippet.id);
@@ -114,7 +116,7 @@ export function ExpanderFileList({
 
       {filtered.length === 0 && (
         <div className="panel-empty-note" style={{ padding: '24px', opacity: 0.5, textAlign: 'center' }}>
-          {searchQuery ? 'Aucun snippet trouvé' : 'Aucun snippet'}
+          {searchQuery ? t('expander.noSnippetFound') : t('expander.noSnippets')}
         </div>
       )}
 
@@ -137,7 +139,7 @@ export function ExpanderFileList({
                 setContextMenu(null);
               }}
             >
-              <span>🗑</span> Supprimer
+              <span>🗑</span> {t('common.delete')}
             </button>
           </motion.div>
         )}

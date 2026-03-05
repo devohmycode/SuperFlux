@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Plus, FolderOpen, Star, List, ChevronDown, ChevronRight,
   Copy, Trash2, User, FolderPlus, Pencil, X,
@@ -61,6 +62,7 @@ export function PasswordEntryList({
   onRenameFolder,
   onDeleteFolder,
 }: PasswordEntryListProps) {
+  const { t } = useTranslation();
   const [filterMode, setFilterMode] = useState<FilterMode>(selectedFolderId ? 'folder' : 'all');
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entryId: string } | null>(null);
@@ -191,7 +193,7 @@ export function PasswordEntryList({
           onClick={() => { setFilterMode('all'); onSelectFolder(null); }}
         >
           <List size={13} />
-          Tous
+          {t('common.all')}
         </button>
         <button
           className={cn(
@@ -203,13 +205,13 @@ export function PasswordEntryList({
           onClick={() => { setFilterMode('favorites'); onSelectFolder(null); }}
         >
           <Star size={13} />
-          Favoris
+          {t('password.favorites')}
         </button>
         <div className="flex-1" />
         <button
           className="p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] transition-colors"
           onClick={() => setAddingFolder(true)}
-          title="Nouveau dossier"
+          title={t('common.newFolder')}
         >
           <FolderPlus size={14} />
         </button>
@@ -226,7 +228,7 @@ export function PasswordEntryList({
               'focus:border-[var(--accent)]',
               'placeholder:text-[var(--text-tertiary)]',
             )}
-            placeholder="Nom du dossier"
+            placeholder={t('common.folderName')}
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             onKeyDown={(e) => {
@@ -342,7 +344,7 @@ export function PasswordEntryList({
           <div className="flex flex-col items-center justify-center py-12 gap-2">
             <span className="text-2xl">🔐</span>
             <p className="text-xs text-[var(--text-tertiary)]">
-              {searchQuery ? 'Aucun résultat' : 'Aucune entrée'}
+              {searchQuery ? t('common.noResults') : t('password.noEntries')}
             </p>
           </div>
         )}
@@ -356,7 +358,7 @@ export function PasswordEntryList({
             'absolute bottom-4 right-4 w-10 h-10 rounded-full shadow-lg flex items-center justify-center',
             'bg-[var(--accent)] text-[var(--text-inverse)] hover:opacity-90 transition-opacity',
           )}
-          title="Ajouter une entrée (Ctrl+N)"
+          title={t('password.addEntry')}
         >
           <Plus size={20} />
         </button>
@@ -376,20 +378,20 @@ export function PasswordEntryList({
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
             onClick={() => { onCopyPassword(contextMenu.entryId); setContextMenu(null); }}
           >
-            <Copy size={13} /> Copier le mot de passe
+            <Copy size={13} /> {t('password.copyPassword')}
           </button>
           <button
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
             onClick={() => { onCopyUsername(contextMenu.entryId); setContextMenu(null); }}
           >
-            <User size={13} /> Copier l'identifiant
+            <User size={13} /> {t('password.copyUsername')}
           </button>
           <div className="my-1 border-t border-[var(--border-subtle)]" />
           <button
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors"
             onClick={() => { onDeleteEntry(contextMenu.entryId); setContextMenu(null); }}
           >
-            <Trash2 size={13} /> Supprimer
+            <Trash2 size={13} /> {t('common.delete')}
           </button>
         </div>
       )}
@@ -415,13 +417,13 @@ export function PasswordEntryList({
               setFolderContextMenu(null);
             }}
           >
-            <Pencil size={13} /> Renommer
+            <Pencil size={13} /> {t('common.rename')}
           </button>
           <button
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 transition-colors"
             onClick={() => { onDeleteFolder(folderContextMenu.folderId); setFolderContextMenu(null); }}
           >
-            <Trash2 size={13} /> Supprimer le dossier
+            <Trash2 size={13} /> {t('password.deleteFolder')}
           </button>
         </div>
       )}

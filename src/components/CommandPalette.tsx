@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, type MutableRefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Command } from '../hooks/useCommands';
 
 interface CommandPaletteProps {
@@ -8,6 +9,7 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ commands, isOpen, onClose }: CommandPaletteProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -100,7 +102,7 @@ export function CommandPalette({ commands, isOpen, onClose }: CommandPaletteProp
             ref={inputRef}
             type="text"
             className="cmd-palette-input"
-            placeholder="Rechercher une commande..."
+            placeholder={t('commandPalette.searchCommand')}
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoComplete="off"
@@ -110,7 +112,7 @@ export function CommandPalette({ commands, isOpen, onClose }: CommandPaletteProp
         </div>
         <div className="cmd-palette-list" ref={listRef}>
           {flatList.length === 0 ? (
-            <div className="cmd-palette-empty">Aucun résultat</div>
+            <div className="cmd-palette-empty">{t('common.noResults')}</div>
           ) : (
             Array.from(grouped.entries()).map(([category, cmds]) => (
               <div key={category}>

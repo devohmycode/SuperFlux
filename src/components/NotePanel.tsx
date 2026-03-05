@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
 import GradientText from './GradientText';
 import GlassIconButton from './GlassIconButton';
 import { NoteStickyBoard } from './NoteStickyBoard';
+import i18n from '../i18n';
 
 export interface Note {
   id: string;
@@ -33,10 +35,12 @@ interface NotePanelProps {
 
 function formatNoteDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+  return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDeleteNote, onUpdateNote }: NotePanelProps) {
+  const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<'cards' | 'board'>('board');
 
   const handleDelete = useCallback((e: React.MouseEvent, noteId: string) => {
@@ -65,14 +69,14 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
           <GlassIconButton
             color="orange"
             icon="▦"
-            title="Vue cartes"
+            title={t('common.cardsView')}
             onClick={() => setViewMode('cards')}
             active={viewMode === 'cards'}
           />
           <GlassIconButton
             color="indigo"
             icon="▤"
-            title="Vue post-its"
+            title={t('common.stickyView')}
             onClick={() => setViewMode('board')}
             active={viewMode === 'board'}
           />
@@ -93,8 +97,8 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
           {notes.length === 0 ? (
             <div className="note-empty">
               <span className="note-empty-icon">✎</span>
-              <p className="note-empty-text">Aucune note</p>
-              <p className="note-empty-hint">Cliquez sur + pour créer votre première note</p>
+              <p className="note-empty-text">{t('notes.noNotes')}</p>
+              <p className="note-empty-hint">{t('notes.createHint')}</p>
             </div>
           ) : (
             <div className="note-cards-grid">
@@ -110,7 +114,7 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
                   <div className="note-card-actions">
                     <button
                       className="note-card-delete"
-                      title="Supprimer"
+                      title={t('common.delete')}
                       onClick={(e) => handleDelete(e, note.id)}
                     >
                       <svg width="10" height="10" viewBox="0 0 10 10">
@@ -120,13 +124,13 @@ export function NotePanel({ notes, selectedNoteId, onSelectNote, onAddNote, onDe
                     </button>
                   </div>
                   <span className="note-card-number">{idx + 1}</span>
-                  <h3 className="note-card-title">{note.title || 'Sans titre'}</h3>
+                  <h3 className="note-card-title">{note.title || t('common.untitled')}</h3>
                   <span className="note-card-date">{formatNoteDate(note.updatedAt)}</span>
                   <div className="note-card-content note-card-md">
                     {note.content ? (
                       <Markdown>{note.content}</Markdown>
                     ) : (
-                      <span className="note-card-empty">Note vide...</span>
+                      <span className="note-card-empty">{t('notes.emptyNote')}</span>
                     )}
                   </div>
                 </motion.div>

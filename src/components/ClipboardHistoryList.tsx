@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
+import i18n from '../i18n';
 
 export interface ClipEntry {
   id: string;
@@ -29,7 +31,8 @@ function truncate(text: string, max: number): string {
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
-  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ClipboardHistoryList({
@@ -42,6 +45,7 @@ export function ClipboardHistoryList({
   onTogglePin,
   onConvertToNote,
 }: ClipboardHistoryListProps) {
+  const { t } = useTranslation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -94,7 +98,7 @@ export function ClipboardHistoryList({
             {hoveredId === entry.id && (
               <button
                 className="expander-copy-btn"
-                title="Re-copier"
+                title={t('clipboard.recopy')}
                 onClick={(e) => {
                   e.stopPropagation();
                   onPasteEntry(entry.id);
@@ -109,7 +113,7 @@ export function ClipboardHistoryList({
 
       {filtered.length === 0 && (
         <div className="panel-empty-note" style={{ padding: '24px', opacity: 0.5, textAlign: 'center' }}>
-          {searchQuery ? 'Aucun clip trouvé' : 'Historique vide'}
+          {searchQuery ? t('clipboard.noClipFound') : t('clipboard.emptyHistory')}
         </div>
       )}
 
@@ -131,7 +135,7 @@ export function ClipboardHistoryList({
                 setContextMenu(null);
               }}
             >
-              <span>📋</span> Re-copier
+              <span>📋</span> {t('clipboard.recopy')}
             </button>
             <button
               className="feed-context-menu-item"
@@ -140,7 +144,7 @@ export function ClipboardHistoryList({
                 setContextMenu(null);
               }}
             >
-              <span>📌</span> {entries.find(e => e.id === contextMenu.entryId)?.pinned ? 'Désépingler' : 'Épingler'}
+              <span>📌</span> {entries.find(e => e.id === contextMenu.entryId)?.pinned ? t('clipboard.unpin') : t('clipboard.pin')}
             </button>
             {onConvertToNote && (
               <button
@@ -151,7 +155,7 @@ export function ClipboardHistoryList({
                   setContextMenu(null);
                 }}
               >
-                <span>📝</span> Convertir en note
+                <span>📝</span> {t('clipboard.convertToNote')}
               </button>
             )}
             <button
@@ -161,7 +165,7 @@ export function ClipboardHistoryList({
                 setContextMenu(null);
               }}
             >
-              <span>🗑</span> Supprimer
+              <span>🗑</span> {t('common.delete')}
             </button>
           </motion.div>
         )}

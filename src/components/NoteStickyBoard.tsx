@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import type { Note } from './NotePanel';
 
@@ -70,6 +71,7 @@ function StickyNoteItem({
   note, isSelected, onSelect, onDelete, onDragEnd,
   onContentUpdate, onBringToFront, onResizeEnd, boardRef,
 }: StickyNoteItemProps) {
+  const { t } = useTranslation();
   const color = note.stickyColor || 'yellow';
   const style = STICKY_COLORS[color] || STICKY_COLORS.yellow;
   const rotation = note.stickyRotation ?? 0;
@@ -204,14 +206,14 @@ function StickyNoteItem({
         <span className="sticky-note-grip">⠿</span>
         <div className="sticky-note-actions">
           {isEditing ? (
-            <button className="sticky-note-btn sticky-note-btn--save" onClick={handleSave} title="Sauvegarder">
+            <button className="sticky-note-btn sticky-note-btn--save" onClick={handleSave} title={t('common.save')}>
               ✓
             </button>
           ) : (
             <button
               className="sticky-note-btn"
               onClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditContent(note.content); }}
-              title="Modifier"
+              title={t('common.edit')}
             >
               ✎
             </button>
@@ -219,7 +221,7 @@ function StickyNoteItem({
           <button
             className="sticky-note-btn sticky-note-btn--delete"
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            title="Supprimer"
+            title={t('common.delete')}
           >
             ✕
           </button>
@@ -227,7 +229,7 @@ function StickyNoteItem({
       </div>
 
       {/* Title */}
-      <div className="sticky-note-title">{note.title || 'Sans titre'}</div>
+      <div className="sticky-note-title">{note.title || t('common.untitled')}</div>
 
       {/* Content */}
       <div className="sticky-note-content">
@@ -238,7 +240,7 @@ function StickyNoteItem({
             onChange={(e) => setEditContent(e.target.value)}
             onKeyDown={handleKeyDown}
             className="sticky-note-textarea"
-            placeholder="Votre note..."
+            placeholder={t('notes.yourNote')}
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           />
@@ -250,7 +252,7 @@ function StickyNoteItem({
             {note.content ? (
               <Markdown>{note.content}</Markdown>
             ) : (
-              <p className="sticky-note-placeholder">Double-cliquez pour modifier...</p>
+              <p className="sticky-note-placeholder">{t('notes.doubleClickToEdit')}</p>
             )}
           </div>
         )}
@@ -278,6 +280,7 @@ function StickyNoteItem({
 export function NoteStickyBoard({
   notes, selectedNoteId, onSelectNote, onDeleteNote, onUpdateNote, onAddNote,
 }: NoteStickyBoardProps) {
+  const { t } = useTranslation();
   const boardRef = useRef<HTMLDivElement>(null);
   const [maxZ, setMaxZ] = useState(() =>
     Math.max(1, ...notes.map(n => n.stickyZIndex ?? 1))
@@ -347,7 +350,7 @@ export function NoteStickyBoard({
             </button>
           ))}
         </div>
-        <button className="sticky-add-btn" onClick={handleAddStickyNote} title="Ajouter un post-it">
+        <button className="sticky-add-btn" onClick={handleAddStickyNote} title={t('notes.addSticky')}>
           +
         </button>
       </div>
@@ -357,8 +360,8 @@ export function NoteStickyBoard({
         {notes.length === 0 && (
           <div className="sticky-board-empty">
             <span className="sticky-board-empty-icon">✎</span>
-            <p>Aucun post-it</p>
-            <p className="sticky-board-empty-hint">Cliquez + pour ajouter</p>
+            <p>{t('notes.noStickies')}</p>
+            <p className="sticky-board-empty-hint">{t('notes.clickToAdd')}</p>
           </div>
         )}
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { Mail, Lock, Eye, EyeClosed, ArrowRight, Github } from 'lucide-react';
@@ -26,6 +27,7 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
 }
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const { t } = useTranslation();
   const { signInWithEmail, signUpWithEmail, signInWithOAuth, isConfigured } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
@@ -64,10 +66,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         onClose();
       } else {
         await signUpWithEmail(email, password);
-        setSuccess('Vérifiez votre e-mail pour confirmer votre compte.');
+        setSuccess(t('auth.checkEmail'));
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Une erreur est survenue';
+      const message = err instanceof Error ? err.message : t('common.errorOccurred');
       setError(message);
     } finally {
       setLoading(false);
@@ -79,7 +81,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     try {
       await signInWithOAuth(provider);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Une erreur est survenue';
+      const message = err instanceof Error ? err.message : t('common.errorOccurred');
       setError(message);
     }
   };
@@ -218,7 +220,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
                   {!isConfigured ? (
                     <div className="relative z-10 text-center space-y-4 py-4">
-                      <p className="text-white/80 text-sm">La synchronisation cloud n'est pas configurée.</p>
+                      <p className="text-white/80 text-sm">{t('auth.cloudNotConfigured')}</p>
                       <p className="text-white/50 text-xs">
                         Renseignez <code className="text-white/70 bg-white/10 px-1 rounded">VITE_SUPABASE_URL</code> et <code className="text-white/70 bg-white/10 px-1 rounded">VITE_SUPABASE_ANON_KEY</code> dans <code className="text-white/70 bg-white/10 px-1 rounded">.env</code>
                       </p>
@@ -226,7 +228,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         onClick={handleClose}
                         className="mt-2 px-4 py-2 rounded-lg bg-white/10 text-white/80 text-sm hover:bg-white/20 transition-colors"
                       >
-                        Fermer
+                        {t('common.close')}
                       </button>
                     </div>
                   ) : (
@@ -249,7 +251,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           transition={{ delay: 0.2 }}
                           className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80"
                         >
-                          {mode === 'login' ? 'Bon retour' : 'Créer un compte'}
+                          {mode === 'login' ? t('auth.welcomeBack') : t('auth.createAccount')}
                         </motion.h1>
 
                         <motion.p
@@ -258,7 +260,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                           transition={{ delay: 0.3 }}
                           className="text-white/60 text-xs"
                         >
-                          {mode === 'login' ? 'Connectez-vous pour continuer' : 'Inscrivez-vous pour commencer'}
+                          {mode === 'login' ? t('auth.connectToContinue') : t('auth.signUpToStart')}
                         </motion.p>
                       </div>
 
@@ -275,7 +277,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                               <Mail className={cn('absolute left-3 w-4 h-4 transition-all duration-300', focusedInput === 'email' ? 'text-white' : 'text-white/40')} />
                               <Input
                                 type="email"
-                                placeholder="Adresse e-mail"
+                                placeholder={t('auth.emailPlaceholder')}
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 onFocus={() => setFocusedInput('email')}
@@ -307,7 +309,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                               <Lock className={cn('absolute left-3 w-4 h-4 transition-all duration-300', focusedInput === 'password' ? 'text-white' : 'text-white/40')} />
                               <Input
                                 type={showPassword ? 'text' : 'password'}
-                                placeholder="Mot de passe"
+                                placeholder={t('auth.passwordPlaceholder')}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 onFocus={() => setFocusedInput('password')}
@@ -382,7 +384,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                                 </motion.div>
                               ) : (
                                 <motion.span key="text" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center justify-center gap-1 text-sm font-medium">
-                                  {mode === 'login' ? 'Se connecter' : 'Créer le compte'}
+                                  {mode === 'login' ? t('auth.signIn') : t('auth.createTheAccount')}
                                   <ArrowRight className="w-3 h-3 group-hover/button:translate-x-1 transition-transform duration-300" />
                                 </motion.span>
                               )}
@@ -398,7 +400,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                             animate={{ opacity: [0.7, 0.9, 0.7] }}
                             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                           >
-                            ou
+                            {t('common.or')}
                           </motion.span>
                           <div className="flex-grow border-t border-white/5" />
                         </div>
@@ -448,28 +450,28 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                         >
                           {mode === 'login' ? (
                             <>
-                              Pas de compte ?{' '}
+                              {t('auth.noAccount')}{' '}
                               <button
                                 type="button"
                                 onClick={() => { setMode('signup'); setError(null); setSuccess(null); }}
                                 className="relative inline-block group/switch"
                               >
                                 <span className="relative z-10 text-white group-hover/switch:text-white/70 transition-colors duration-300 font-medium">
-                                  Créer un compte
+                                  {t('auth.createAccount')}
                                 </span>
                                 <span className="absolute bottom-0 left-0 w-0 h-px bg-white group-hover/switch:w-full transition-all duration-300" />
                               </button>
                             </>
                           ) : (
                             <>
-                              Déjà un compte ?{' '}
+                              {t('auth.alreadyHaveAccount')}{' '}
                               <button
                                 type="button"
                                 onClick={() => { setMode('login'); setError(null); setSuccess(null); }}
                                 className="relative inline-block group/switch"
                               >
                                 <span className="relative z-10 text-white group-hover/switch:text-white/70 transition-colors duration-300 font-medium">
-                                  Se connecter
+                                  {t('auth.signIn')}
                                 </span>
                                 <span className="absolute bottom-0 left-0 w-0 h-px bg-white group-hover/switch:w-full transition-all duration-300" />
                               </button>

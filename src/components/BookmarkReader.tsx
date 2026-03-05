@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import type { WebBookmark } from '../services/bookmarkService';
+import i18n from '../i18n';
 import { extractArticle, type ExtractedArticle } from '../services/articleExtractor';
 import { translateText, getTranslationConfig } from '../services/translationService';
 import { applyHighlights } from '../lib/highlightHtml';
@@ -24,6 +26,7 @@ interface BookmarkReaderProps {
 }
 
 export function BookmarkReader({ bookmark, onMarkRead, translateActive: translateActiveProp, highlights, onHighlightAdd, onHighlightRemove, onHighlightNoteUpdate, onCreateNoteFromSelection }: BookmarkReaderProps) {
+  const { t } = useTranslation();
   const { isPro, showUpgradeModal } = usePro();
   const [article, setArticle] = useState<ExtractedArticle | null>(null);
   const [status, setStatus] = useState<LoadStatus>('idle');
@@ -220,7 +223,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
     return (
       <div className="bk-reader-empty">
         <span className="bk-reader-empty-icon">🔖</span>
-        <p>Sélectionnez un bookmark pour le lire</p>
+        <p>{t('bookmarks.selectToRead')}</p>
       </div>
     );
   }
@@ -246,14 +249,14 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
             <button
               className={`bk-reader-viewbtn ${viewMode === 'reader' ? 'active' : ''}`}
               onClick={() => setViewMode('reader')}
-              title="Mode lecture"
+              title={t('bookmarks.readerMode')}
             >
               ¶
             </button>
             <button
               className={`bk-reader-viewbtn ${viewMode === 'web' ? 'active' : ''}`}
               onClick={() => setViewMode('web')}
-              title="Mode web"
+              title={t('bookmarks.webMode')}
             >
               ◉
             </button>
@@ -264,14 +267,14 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
               <button
                 className="bk-reader-fontbtn"
                 onClick={() => setFontSize(s => Math.max(12, s - 1))}
-                title="Réduire"
+                title={t('bookmarks.shrink')}
               >
                 A−
               </button>
               <button
                 className="bk-reader-fontbtn"
                 onClick={() => setFontSize(s => Math.min(24, s + 1))}
-                title="Agrandir"
+                title={t('bookmarks.enlarge')}
               >
                 A+
               </button>
@@ -282,7 +285,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
             <div style={{ position: 'relative' }}>
               <button
                 className="bk-reader-viewbtn"
-                title={isPro ? "Surlignages" : "Surlignages (Pro)"}
+                title={isPro ? t('bookmarks.highlights') : t('bookmarks.highlightsPro')}
                 onClick={isPro ? () => setHighlightsMenuOpen(prev => !prev) : showUpgradeModal}
               >
                 {isPro ? (
@@ -295,7 +298,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
               {highlightsMenuOpen && (
                 <div className="highlights-menu-dropdown">
                   <div className="highlights-menu-header">
-                    <span className="highlights-menu-title">Surlignages</span>
+                    <span className="highlights-menu-title">{t('bookmarks.highlights')}</span>
                     {(highlights?.length ?? 0) > 0 && (
                       <span className="highlights-badge">{highlights!.length}</span>
                     )}
@@ -303,7 +306,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                   <div className="highlights-menu-list">
                     {(!highlights || highlights.length === 0) ? (
                       <div className="highlights-menu-empty">
-                        Sélectionnez du texte pour surligner
+                        {t('bookmarks.selectTextToHighlight')}
                       </div>
                     ) : highlights.map(hl => (
                       <div
@@ -331,7 +334,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                               onBlur={handleSaveNote}
                               onClick={(e) => e.stopPropagation()}
                               autoFocus
-                              placeholder="Ajouter une note..."
+                              placeholder={t('bookmarks.addNote')}
                             />
                           ) : hl.note ? (
                             <div
@@ -355,7 +358,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                             e.stopPropagation();
                             onHighlightRemove?.(bookmark.id, hl.id);
                           }}
-                          title="Supprimer"
+                          title={t('common.delete')}
                           style={{ color: 'var(--red)', marginLeft: 4 }}
                         >
                           ✕
@@ -368,7 +371,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
             </div>
           )}
           {/* External link */}
-          <button className="bk-reader-extbtn" onClick={handleOpenExternal} title="Ouvrir dans le navigateur">
+          <button className="bk-reader-extbtn" onClick={handleOpenExternal} title={t('bookmarks.openInBrowser')}>
             ↗
           </button>
         </div>
@@ -389,7 +392,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                 <div className="bk-reader-loading-bar" />
                 <div className="bk-reader-loading-body">
                   <span className="bk-reader-spinner" />
-                  <span>Extraction de l'article...</span>
+                  <span>{t('bookmarks.extracting')}</span>
                 </div>
               </motion.div>
             )}
@@ -403,14 +406,14 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                 exit={{ opacity: 0 }}
               >
                 <span className="bk-reader-error-icon">⊘</span>
-                <h3>Impossible de charger l'article</h3>
-                <p>Le contenu de cette page n'a pas pu être extrait.</p>
+                <h3>{t('bookmarks.cannotLoad')}</h3>
+                <p>{t('bookmarks.cannotExtract')}</p>
                 <div className="bk-reader-error-actions">
                   <button className="bk-reader-error-btn primary" onClick={handleOpenExternal}>
-                    Ouvrir dans le navigateur ↗
+                    {t('bookmarks.openInBrowserArrow')}
                   </button>
                   <button className="bk-reader-error-btn" onClick={handleRetry}>
-                    Réessayer
+                    {t('common.retry')}
                   </button>
                 </div>
               </motion.div>
@@ -448,7 +451,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                 {showTranslation && translateState === 'loading' && (
                   <div className="bk-reader-loading-body" style={{ padding: '12px 0' }}>
                     <span className="bk-reader-spinner" />
-                    <span>Traduction en cours...</span>
+                    <span>{t('bookmarks.translating')}</span>
                   </div>
                 )}
                 <div
@@ -506,7 +509,7 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
                 window.getSelection()?.removeAllRanges();
               }
             }}
-            title="Créer une note"
+            title={t('bookmarks.createNote')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 20h9" />
@@ -520,7 +523,8 @@ export function BookmarkReader({ bookmark, onMarkRead, translateActive: translat
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('fr-FR', {
+  const locale = i18n.language === 'fr' ? 'fr-FR' : 'en-US';
+  return new Date(dateStr).toLocaleDateString(locale, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

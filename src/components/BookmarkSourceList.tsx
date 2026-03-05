@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import type { WebBookmark } from '../services/bookmarkService';
 
@@ -37,6 +38,7 @@ export function BookmarkSourceList({
   onSelectBookmark,
   totalCount,
 }: BookmarkSourceListProps) {
+  const { t } = useTranslation();
   const [newFolderInput, setNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
@@ -114,7 +116,7 @@ export function BookmarkSourceList({
         onClick={() => onSelectFolder(null)}
       >
         <span className="source-all-icon">🔖</span>
-        <span className="source-all-label">Tous les bookmarks</span>
+        <span className="source-all-label">{t('bookmarks.allBookmarks')}</span>
         {(totalCount ?? 0) > 0 && (
           <span className="source-all-count">{totalCount}</span>
         )}
@@ -127,10 +129,10 @@ export function BookmarkSourceList({
           setNewFolderInput(true);
           setTimeout(() => newFolderRef.current?.focus(), 50);
         }}
-        title="Nouveau dossier"
+        title={t('common.newFolder')}
       >
         <span className="nsrc-add-folder-icon">+</span>
-        <span className="nsrc-add-folder-label">Nouveau dossier</span>
+        <span className="nsrc-add-folder-label">{t('common.newFolder')}</span>
       </button>
 
       {/* New folder input */}
@@ -153,7 +155,7 @@ export function BookmarkSourceList({
                 if (e.key === 'Escape') { setNewFolderInput(false); setNewFolderName(''); }
               }}
               onBlur={handleCreateFolder}
-              placeholder="Nom du dossier"
+              placeholder={t('common.folderName')}
             />
           </motion.div>
         )}
@@ -204,7 +206,7 @@ export function BookmarkSourceList({
               <div className="subfolder-feeds">
                 {folderBookmarks.length === 0 ? (
                   <div className="bksrc-empty" style={{ paddingLeft: 32, fontSize: 11, color: 'var(--text-tertiary)', padding: '4px 8px 4px 32px' }}>
-                    Aucun bookmark
+                    {t('bookmarks.noBookmarks')}
                   </div>
                 ) : (
                   folderBookmarks.map((bk) => (
@@ -256,7 +258,7 @@ export function BookmarkSourceList({
             }}
           >
             <span className="feed-context-menu-icon">✎</span>
-            Renommer
+            {t('common.rename')}
           </button>
           <button
             className="feed-context-menu-item feed-context-menu-item--danger"
@@ -266,7 +268,7 @@ export function BookmarkSourceList({
             }}
           >
             <span className="feed-context-menu-icon">✕</span>
-            Supprimer
+            {t('common.delete')}
           </button>
         </div>
       )}

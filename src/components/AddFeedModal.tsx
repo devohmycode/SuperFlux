@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import type { FeedSource } from '../types';
 import { searchFeeds, isSearchableSource, searchLabels, type FeedSearchResult } from '../services/feedSearchService';
@@ -20,12 +21,12 @@ export interface NewFeedData {
 }
 
 const sourceOptions: { value: FeedSource; label: string; icon: string; placeholder: string; hint?: string }[] = [
-  { value: 'article', label: 'Article / Blog', icon: '◇', placeholder: 'Rechercher un blog...', hint: 'Recherchez ou collez une URL RSS' },
-  { value: 'reddit', label: 'Reddit', icon: '⬡', placeholder: 'Rechercher un subreddit...', hint: 'Recherchez ou collez r/nom' },
-  { value: 'youtube', label: 'YouTube', icon: '▷', placeholder: '@fireship', hint: '@nom ou URL complète' },
-  { value: 'twitter', label: 'Twitter / X', icon: '✦', placeholder: '@Anthropic', hint: '@nom ou URL complète' },
+  { value: 'article', label: 'Article / Blog', icon: '◇', placeholder: 'addFeed.searchBlog', hint: 'addFeed.searchBlogHint' },
+  { value: 'reddit', label: 'Reddit', icon: '⬡', placeholder: 'addFeed.searchSubreddit', hint: 'addFeed.searchSubredditHint' },
+  { value: 'youtube', label: 'YouTube', icon: '▷', placeholder: '@fireship', hint: 'addFeed.atHint' },
+  { value: 'twitter', label: 'Twitter / X', icon: '✦', placeholder: '@Anthropic', hint: 'addFeed.atHint' },
   { value: 'mastodon', label: 'Mastodon', icon: '🐘', placeholder: 'https://mastodon.social/@username.rss' },
-  { value: 'podcast', label: 'Podcast', icon: '🎙', placeholder: 'Rechercher un podcast...', hint: 'Recherchez ou collez une URL RSS' },
+  { value: 'podcast', label: 'Podcast', icon: '🎙', placeholder: 'addFeed.searchPodcast', hint: 'addFeed.searchPodcastHint' },
 ];
 
 function looksLikeUrl(input: string): boolean {
@@ -144,6 +145,7 @@ function resolveInput(raw: string, currentSource: FeedSource): { url: string; na
 }
 
 export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedModalProps) {
+  const { t } = useTranslation();
   const { isPro, showUpgradeModal } = usePro();
   const [name, setName] = useState('');
   const [input, setInput] = useState('');
@@ -231,7 +233,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
     setSearchQuery('');
 
     if (!input.trim()) {
-      setError("L'URL ou l'identifiant est requis");
+      setError(t('addFeed.urlRequired'));
       return;
     }
 
@@ -242,7 +244,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
       try {
         new URL(finalUrl);
       } catch {
-        setError("URL invalide. Essayez r/nom pour Reddit ou @nom pour YouTube");
+        setError(t('addFeed.urlInvalid'));
         return;
       }
     }
@@ -310,7 +312,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className="modal-header">
-              <h2 className="modal-title">Ajouter un flux</h2>
+              <h2 className="modal-title">{t('addFeed.title')}</h2>
               <button className="modal-close" onClick={onClose}>×</button>
             </div>
 
@@ -319,7 +321,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
                 <label htmlFor="feed-url" className="form-label">
                   {searchLabels[source] || 'Flux'}
                   {currentOption?.hint && (
-                    <span className="form-hint"> — {currentOption.hint}</span>
+                    <span className="form-hint"> — {t(currentOption.hint)}</span>
                   )}
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -328,7 +330,7 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
                     type="text"
                     className="form-input"
                     style={{ width: '100%' }}
-                    placeholder={currentOption?.placeholder}
+                    placeholder={t(currentOption?.placeholder ?? '')}
                     value={input}
                     onChange={(e) => handleInputChange(e.target.value)}
                     autoFocus
@@ -338,11 +340,11 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
                       {isSearching ? (
                         <div className="feed-search-loading">
                           <span className="btn-spinner" />
-                          Recherche...
+                          {t('addFeed.searching')}
                         </div>
                       ) : searchResults.length === 0 ? (
                         <div className="feed-search-empty">
-                          Aucun résultat trouvé
+                          {t('addFeed.noResultsFound')}
                         </div>
                       ) : (
                         searchResults.map((result, i) => (
@@ -407,25 +409,25 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
                     <svg className="rsshub-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
                       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                     </svg>
-                    <span className="rsshub-suggestion-text">Flux RSSHub disponible — {rsshubMatch.label}</span>
+                    <span className="rsshub-suggestion-text">{t('addFeed.rsshubAvailable', { label: rsshubMatch.label })}</span>
                   </motion.button>
                 )}
               </div>
 
               <div className="form-group">
-                <label htmlFor="feed-name" className="form-label">Nom (optionnel)</label>
+                <label htmlFor="feed-name" className="form-label">{t('addFeed.nameOptional')}</label>
                 <input
                   id="feed-name"
                   type="text"
                   className="form-input"
-                  placeholder={resolved.name || "Mon flux préféré"}
+                  placeholder={resolved.name || t('addFeed.namePlaceholder')}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Type de source</label>
+                <label className="form-label">{t('addFeed.sourceType')}</label>
                 <div className="source-selector">
                   {sourceOptions.map((opt) => (
                     <button
@@ -453,16 +455,16 @@ export function AddFeedModal({ isOpen, onClose, onAdd, feedCount = 0 }: AddFeedM
 
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={onClose}>
-                  Annuler
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary" disabled={isLoading}>
                   {isLoading ? (
                     <>
                       <span className="btn-spinner" />
-                      Vérification...
+                      {t('common.verification')}
                     </>
                   ) : (
-                    'Ajouter'
+                    t('common.add')
                   )}
                 </button>
               </div>

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from './ui/button';
@@ -8,7 +9,7 @@ interface PasswordVaultSetupProps {
   onCreated: () => void;
 }
 
-function getStrength(password: string): { score: number; label: string; color: string } {
+function getStrength(password: string): { score: number; labelKey: string; color: string } {
   let score = 0;
   if (password.length >= 8) score += 1;
   if (password.length >= 12) score += 1;
@@ -17,12 +18,13 @@ function getStrength(password: string): { score: number; label: string; color: s
   if (/\d/.test(password)) score += 1;
   if (/[^a-zA-Z0-9]/.test(password)) score += 1;
 
-  if (score <= 2) return { score, label: 'Faible', color: 'bg-red-500' };
-  if (score <= 4) return { score, label: 'Moyen', color: 'bg-amber-500' };
-  return { score, label: 'Fort', color: 'bg-green-500' };
+  if (score <= 2) return { score, labelKey: 'password.weak', color: 'bg-red-500' };
+  if (score <= 4) return { score, labelKey: 'password.medium', color: 'bg-amber-500' };
+  return { score, labelKey: 'password.strong', color: 'bg-green-500' };
 }
 
 export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
+  const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -36,11 +38,11 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
   const handleCreate = useCallback(async () => {
     setError(null);
     if (password.length < 8) {
-      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      setError(t('password.minPasswordLength'));
       return;
     }
     if (password !== confirm) {
-      setError('Les mots de passe ne correspondent pas.');
+      setError(t('password.passwordsDoNotMatch'));
       return;
     }
     setLoading(true);
@@ -48,7 +50,7 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
       await invoke('pw_create_vault', { password });
       onCreated();
     } catch (err) {
-      setError(typeof err === 'string' ? err : (err as Error).message || 'Erreur lors de la création du coffre-fort.');
+      setError(typeof err === 'string' ? err : (err as Error).message || t('password.vaultCreateError'));
     } finally {
       setLoading(false);
     }
@@ -79,10 +81,10 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
             <Lock size={32} />
           </div>
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">
-            Créer votre coffre-fort
+            {t('password.createVault')}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] text-center">
-            Choisissez un mot de passe maître pour protéger vos identifiants.
+            {t('password.createVaultDesc')}
           </p>
         </div>
 
@@ -90,7 +92,7 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Mot de passe maître
+              {t('password.masterPassword')}
             </label>
             <div className="relative">
               <input
@@ -101,7 +103,7 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
                   'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                   'placeholder:text-[var(--text-tertiary)]',
                 )}
-                placeholder="Entrez votre mot de passe maître"
+                placeholder={t('password.enterMasterPassword')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
@@ -127,9 +129,9 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
                 />
               </div>
               <p className="text-xs text-[var(--text-tertiary)]">
-                Force : <span className={cn(
+                {t('password.strength')} : <span className={cn(
                   strength.score <= 2 ? 'text-red-500' : strength.score <= 4 ? 'text-amber-500' : 'text-green-500',
-                )}>{strength.label}</span>
+                )}>{t(strength.labelKey)}</span>
               </p>
             </div>
           )}
@@ -137,7 +139,7 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
           {/* Confirm */}
           <div>
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Confirmer le mot de passe
+              {t('password.confirmPassword')}
             </label>
             <div className="relative">
               <input
@@ -148,7 +150,7 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
                   'focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]',
                   'placeholder:text-[var(--text-tertiary)]',
                 )}
-                placeholder="Confirmez votre mot de passe"
+                placeholder={t('password.confirmYourPassword')}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
               />
@@ -180,10 +182,10 @@ export function PasswordVaultSetup({ onCreated }: PasswordVaultSetupProps) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Création...
+                {t('password.creating')}
               </span>
             ) : (
-              'Créer le coffre-fort'
+              t('password.createTheVault')
             )}
           </Button>
         </div>
