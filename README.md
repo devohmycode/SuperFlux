@@ -4,6 +4,63 @@
 [![Build & Release](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml)
 # SuperFlux
 
+## Changelog
+
+v0.6.3
+
+  🔐 SuperPassword — Password Manager (Pro)
+
+  An encrypted password vault built directly into SuperFlux.
+
+  - AES-256-GCM encryption with Argon2id key derivation (64 MB, 3 iterations) — the master password is never stored on
+  disk
+  - Full entry management: title, URL, username, password, notes, custom fields, and favorites
+  - Password generator with strength indicator, configurable options (length, uppercase, lowercase, digits, symbols,
+  exclude ambiguous characters)
+  - Built-in TOTP: add 2FA codes directly on each entry (supports otpauth:// URIs and raw base32 secrets), real-time
+  countdown refresh
+  - Auto-lock with configurable timeout (default: 5 min) — the master key is zeroized from memory on expiration
+  - Auto-clear clipboard after copying a password (default: 30 seconds)
+  - Folder organization with instant search
+  - Import/Export in CSV and JSON formats
+  - Optional cloud sync via Supabase — the encrypted vault is automatically uploaded/downloaded on login
+  - Security audit of stored passwords
+
+  📓 SuperMarkdown — Markdown Editor (Pro)
+
+  An Obsidian-style Markdown editor, fully integrated.
+
+  - CodeMirror 6 editor with Markdown syntax highlighting, keyboard shortcuts, and adaptive theme
+  - Live preview with faithful Markdown rendering
+  - Wikilinks [[...]] with auto-completion and cross-file navigation
+  - File tree with file and folder creation, renaming, and deletion
+  - Tabs to work on multiple files simultaneously
+  - Git panel: view status, stage changes, commit, and diff directly from the editor
+  - Side-by-side diff view to compare modifications
+  - Global search across the entire vault with result navigation
+  - Backlinks: see all pages linking to the active file
+  - Tags: extraction and navigation via #tag syntax
+  - Command palette (Ctrl+Shift+P) for quick access to all actions
+  - Status bar: line, column, word count, editing mode
+
+  🔔 Notifications
+
+  - Native notifications for new articles — toggleable per feed
+  - Uses the OS native notification system via the Tauri Notification plugin
+
+  🛠 Miscellaneous improvements
+
+  - AuthModal: redesigned authentication interface
+  - SourcePanel: added password vault sync panel (toggle cloud sync, last sync date)
+  - TitleBar: two new mode tabs (Passwords Ctrl+9, Markdown Ctrl+0), graceful handling of getCurrentWindow() outside
+  Tauri context
+  - SuperClipboard: UI improvements
+  - UpgradeModal: updated to reflect new Pro features
+  - GlassIconButton: additional prop support
+  - Added .playwright-mcp/ to .gitignore
+
+  ---
+
 A fast, native desktop RSS reader and productivity suite with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, bookmarks, notes, a document editor, a drawing canvas, and a collapsible bar mode. Built with Tauri 2 and React 19.
 
 ![Shot2](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-02.png)
