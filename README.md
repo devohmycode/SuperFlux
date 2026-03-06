@@ -140,17 +140,22 @@ Built-in audio player for podcast feeds with:
 - Seekable progress bar, volume slider
 - Album artwork display
 
-### 5 Integrated Modes
+### 10 Integrated Modes
 
-Switch between modes using the icon tab bar in the sources panel or keyboard shortcuts `Ctrl+1` through `Ctrl+5`. A command palette (`Ctrl+K`) provides quick access to all commands and navigation.
+Switch between modes using the icon tab bar in the sources panel or keyboard shortcuts `Ctrl+1` through `Ctrl+0`. A command palette (`Ctrl+K`) provides quick access to all commands and navigation.
 
 | Mode | Shortcut | Description |
 |------|----------|-------------|
 | **SuperFlux** | `Ctrl+1` | RSS reader -- the default 3-panel feed experience |
 | **SuperBookmark** | `Ctrl+2` | Web bookmark manager with full-page reader and metadata extraction |
 | **SuperNote** | `Ctrl+3` | Sticky notes with folders, color-coded cards, and cloud sync |
-| **SuperEditor** | `Ctrl+4` | Document editor with Pandoc export (PDF, DOCX, HTML, Markdown) |
-| **SuperDraw** | `Ctrl+5` | Canvas drawing tool with shapes, freehand, text, arrows, dark/light mode, and PNG export |
+| **SuperEditor** *(Pro)* | `Ctrl+4` | Document editor with Pandoc export (PDF, DOCX, HTML, Markdown) |
+| **SuperDraw** *(Pro)* | `Ctrl+5` | Canvas drawing tool with shapes, freehand, text, arrows, dark/light mode, and PNG export |
+| **SuperTranslate** | `Ctrl+6` | Real-time text translation with auto-detection across 12 languages |
+| **SuperExpander** | `Ctrl+7` | Text snippet expander with keywords, dynamic placeholders, and global shortcuts |
+| **SuperClipboard** | `Ctrl+8` | Clipboard history manager with pinning, search, and keyboard shortcuts |
+| **SuperPassword** *(Pro)* | `Ctrl+9` | Encrypted password vault with TOTP, audit, generator, and import/export |
+| **SuperMarkdown** *(Pro)* | `Ctrl+0` | Markdown editor with vault, tabs, Git integration, backlinks, and live preview |
 
 ## SuperFlux
 ![1](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/103shots_so_wjjd1q.png)
@@ -170,7 +175,7 @@ Save and organize web bookmarks with automatic metadata extraction (title, excer
 
 Quick note-taking with folder organization, sticky-note style cards, and Supabase cloud sync. Notes support positioning, colors, and resizing.
 
-### SuperEditor
+### SuperEditor *(Pro)*
 
 A full document editor with:
 
@@ -178,7 +183,7 @@ A full document editor with:
 - **Pandoc integration** for exporting to PDF, DOCX, HTML, Markdown, and more
 - Cloud sync via Supabase
 
-### SuperDraw
+### SuperDraw *(Pro)*
 
 A custom canvas drawing tool inspired by Excalidraw:
 
@@ -191,6 +196,58 @@ A custom canvas drawing tool inspired by Excalidraw:
 - **Selection** with resize handles, multi-select box, duplicate (`Ctrl+D`), delete
 - **Undo / redo** history (`Ctrl+Z` / `Ctrl+Y`)
 - **PNG export** and persistent local storage
+
+### SuperTranslate
+
+Instant text translation powered by Google Translate:
+
+- **12 languages** supported: French, English, Spanish, German, Italian, Portuguese, Dutch, Russian, Japanese, Chinese, Korean, Arabic
+- **Auto-detection** of source language
+- **Swap languages** with one click
+- Auto-translate with debounce as you type
+
+### SuperExpander
+
+A text snippet expander for quickly inserting reusable text blocks:
+
+- Create snippets with **trigger keywords** that expand on demand
+- **Dynamic placeholders**: `{date}`, `{time}`, `{datetime}`, `{day}`, `{uuid}`, `{clipboard}`
+- Assign **global keyboard shortcuts** to snippets
+- Folder and time-based grouping
+
+### SuperClipboard
+
+A clipboard history manager that tracks everything you copy:
+
+- **Automatic history** with time-grouped entries (last hour, today, this week, older)
+- **Pin** important entries to keep them at the top
+- **Global keyboard shortcuts** for quick paste of frequent entries
+- Search through clipboard history
+- Convert clipboard entries to SuperNote notes
+
+### SuperPassword *(Pro)*
+
+An encrypted local password vault:
+
+- **AES-encrypted vault** with master password, auto-lock, and clipboard auto-clear
+- **Password generator** with configurable length, character sets, and strength audit
+- **TOTP / 2FA** support for time-based one-time passwords
+- **Folder organization**, favorites, tags, and search
+- **Import / export** passwords (CSV, JSON)
+- **Security audit** to detect weak, reused, or compromised passwords
+- Cloud sync via Supabase
+
+### SuperMarkdown *(Pro)*
+
+A full-featured Markdown editor with vault-based file management:
+
+- **Vault directory** with file tree navigation and folder support
+- **Multi-tab editing** with unsaved change indicators
+- **3 view modes**: edit, split (side-by-side), and live preview
+- **Git integration** with status, diffs, commit, push, and pull
+- **Backlinks and tags** panels for knowledge-graph navigation
+- **Search** across all vault files
+- **Command palette** and status bar with cursor position and word count
 
 ### Full Article Extraction
 
@@ -224,7 +281,7 @@ Sign in with a Supabase account to sync feeds, read/star/bookmark status across 
 | Key | Action |
 |-----|--------|
 | `Ctrl+K` | Open command palette |
-| `Ctrl+1`--`5` | Switch mode (Flux, Bookmark, Note, Editor, Draw) |
+| `Ctrl+1`--`0` | Switch mode (Flux, Bookmark, Note, Editor, Draw, Translate, Expander, Clipboard, Password, Markdown) |
 | `Alt+1` | Toggle Sources panel |
 | `Alt+2` | Toggle Feed panel |
 | `Alt+3` | Toggle Reader panel |
@@ -320,6 +377,11 @@ src/
     BookmarkReader.tsx        # Bookmark reader view (SuperBookmark mode)
     SuperEditor.tsx           # Document editor with Pandoc export (SuperEditor mode)
     SuperDraw.tsx             # Canvas drawing tool (SuperDraw mode)
+    SuperTranslate.tsx        # Real-time translator (SuperTranslate mode)
+    SuperExpander.tsx          # Text snippet expander (SuperExpander mode)
+    SuperClipboard.tsx        # Clipboard history manager (SuperClipboard mode)
+    SuperPassword.tsx         # Encrypted password vault (SuperPassword mode)
+    SuperMarkdown.tsx         # Markdown editor with vault (SuperMarkdown mode)
     CommandPalette.tsx        # Ctrl+K command palette
     ShortcutsOverlay.tsx      # Keyboard shortcuts help overlay
     TitleBar.tsx              # Custom title bar with bar/collapse mode
