@@ -1,5 +1,65 @@
-![Shot](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-01.png)
+
+
+![Shot](https://res.cloudinary.com/dptrimoqv/image/upload/v1772099004/519shots_so_md2m1k.png)
+[![Build & Release](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/devohmycode/SuperFlux/actions/workflows/build.yml)
 # SuperFlux
+
+## Changelog
+
+v0.7.0
+
+  🔐 SuperPassword — Password Manager (Pro)
+
+  An encrypted password vault built directly into SuperFlux.
+
+  - AES-256-GCM encryption with Argon2id key derivation (64 MB, 3 iterations) — the master password is never stored on
+  disk
+  - Full entry management: title, URL, username, password, notes, custom fields, and favorites
+  - Password generator with strength indicator, configurable options (length, uppercase, lowercase, digits, symbols,
+  exclude ambiguous characters)
+  - Built-in TOTP: add 2FA codes directly on each entry (supports otpauth:// URIs and raw base32 secrets), real-time
+  countdown refresh
+  - Auto-lock with configurable timeout (default: 5 min) — the master key is zeroized from memory on expiration
+  - Auto-clear clipboard after copying a password (default: 30 seconds)
+  - Folder organization with instant search
+  - Import/Export in CSV and JSON formats
+  - Optional cloud sync via Supabase — the encrypted vault is automatically uploaded/downloaded on login
+  - Security audit of stored passwords
+
+  📓 SuperMarkdown — Markdown Editor (Pro)
+
+  An Obsidian-style Markdown editor, fully integrated.
+
+  - CodeMirror 6 editor with Markdown syntax highlighting, keyboard shortcuts, and adaptive theme
+  - Live preview with faithful Markdown rendering
+  - Wikilinks [[...]] with auto-completion and cross-file navigation
+  - File tree with file and folder creation, renaming, and deletion
+  - Tabs to work on multiple files simultaneously
+  - Git panel: view status, stage changes, commit, and diff directly from the editor
+  - Side-by-side diff view to compare modifications
+  - Global search across the entire vault with result navigation
+  - Backlinks: see all pages linking to the active file
+  - Tags: extraction and navigation via #tag syntax
+  - Command palette (Ctrl+Shift+P) for quick access to all actions
+  - Status bar: line, column, word count, editing mode
+
+  🔔 Notifications
+
+  - Native notifications for new articles — toggleable per feed
+  - Uses the OS native notification system via the Tauri Notification plugin
+
+  🛠 Miscellaneous improvements
+
+  - AuthModal: redesigned authentication interface
+  - SourcePanel: added password vault sync panel (toggle cloud sync, last sync date)
+  - TitleBar: two new mode tabs (Passwords Ctrl+9, Markdown Ctrl+0), graceful handling of getCurrentWindow() outside
+  Tauri context
+  - SuperClipboard: UI improvements
+  - UpgradeModal: updated to reflect new Pro features
+  - GlassIconButton: additional prop support
+  - Added .playwright-mcp/ to .gitignore
+
+  ---
 
 A fast, native desktop RSS reader and productivity suite with a resizable 3-panel layout, built-in Reddit comments, AI summaries, text-to-speech, bookmarks, notes, a document editor, a drawing canvas, and a collapsible bar mode. Built with Tauri 2 and React 19.
 
@@ -20,7 +80,7 @@ The interface is split into three independently resizable columns with drag hand
 Each panel can be **closed individually** -- it collapses into a thin clickable strip. Toggle panels with keyboard shortcuts `1`, `2`, `3`. Panels resize freely by dragging the handles between them.
 
 ### Collapsible Bar Mode
-![Shot5](https://github.com/devohmycode/SuperFlux/blob/master/src-tauri/icons/shot-05.png)
+![Shot5](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098782/750shots_so_zgfr6p.png)
 Click the collapse button in the title bar and the entire app shrinks into a **slim floating bar** that stays on your desktop. The bar displays:
 
 - **Unread count**, favorites and read-later badges
@@ -97,6 +157,16 @@ Switch between modes using the icon tab bar in the sources panel or keyboard sho
 | **SuperPassword** *(Pro)* | `Ctrl+9` | Encrypted password vault with TOTP, audit, generator, and import/export |
 | **SuperMarkdown** *(Pro)* | `Ctrl+0` | Markdown editor with vault, tabs, Git integration, backlinks, and live preview |
 
+## SuperFlux
+![1](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/103shots_so_wjjd1q.png)
+## SuperBookmark
+![2](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/183shots_so_jeb7qw.png)
+## SuperNote
+![3](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/763shots_so_x2qzix.png)
+## SuperEditor
+![4](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098783/217shots_so_dgkggj.png)
+## SuperDraw
+![5](https://res.cloudinary.com/dptrimoqv/image/upload/v1772098782/54shots_so_jmrwts.png)
 ### SuperBookmark
 
 Save and organize web bookmarks with automatic metadata extraction (title, excerpt, favicon, author). Features a built-in reader view for saved pages.
@@ -231,9 +301,9 @@ SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks
 
 - Unlimited AI summaries (article + feed digest)
 - Text highlighting and notes
-- 50+ feeds (vs limited in free)
-- 10+ folders for organization
-- **SuperEditor**, **SuperDraw**, **SuperPassword**, and **SuperMarkdown** modes
+- Illimited feeds (vs 10 in free)
+- Illimited folders for organization (vs 5 in free)
+- TTS Elevenlab
 - Early access to new features
 
 ## Tech Stack
@@ -249,6 +319,15 @@ SuperFlux is free with generous limits. The Pro plan (one-time purchase) unlocks
 | Payments | [LemonSqueezy](https://www.lemonsqueezy.com/) |
 | AI | [Groq](https://groq.com/) / [Ollama](https://ollama.com/) |
 | TTS | Web Speech API / Native OS / [ElevenLabs](https://elevenlabs.io/) |
+
+
+## Additional applications
+
+[Plugins Chrome & Firefox](https://github.com/devohmycode/SuperFlux-Plugin) :
+
+[Firefox](https://addons.mozilla.org/fr/android/addon/superflux/)
+
+[Android APK](https://github.com/devohmycode/SuperFluxDroid)
 
 ## Getting Started
 
