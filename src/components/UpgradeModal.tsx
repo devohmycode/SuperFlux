@@ -74,12 +74,15 @@ export function UpgradeModal() {
                   {t('upgrade.description')}
                 </p>
                 <ul style={{ margin: '12px 0', paddingLeft: 20, lineHeight: 1.8 }}>
-                  <li>{t('upgrade.featureFeeds')}</li>
-                  <li>{t('upgrade.featureFolders')}</li>
-                  <li>{t('upgrade.featureAI')}</li>
-                  <li>{t('upgrade.featureHighlights')}</li>
-                  <li>{t('upgrade.featureTools')}</li>
-                  <li>{t('upgrade.featureEarlyAccess')}</li>
+                  <li>{t('upgrade.moreThan10Feeds')}</li>
+                  <li>{t('upgrade.moreThan5Folders')}</li>
+                  <li>{t('upgrade.unlimitedAI')}</li>
+                  <li>{t('upgrade.highlightsNotes')}</li>
+                  <li>{t('upgrade.superEditor')}</li>
+                  <li>{t('upgrade.superDraw')}</li>
+                  <li>{t('upgrade.superPassword')}</li>
+                  <li>{t('upgrade.superMarkdown')}</li>
+                  <li>{t('upgrade.earlyAccess')}</li>
                 </ul>
 
                 <button
